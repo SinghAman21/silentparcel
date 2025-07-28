@@ -162,8 +162,8 @@ export function encryptZipFile(buffer: Buffer): { encrypted: Buffer; encryptedKe
     // @ts-ignore
     encryptedData
   ]);
-  // const publicKey = process.env.ZIP_ENCRYPTION_PUBLIC_KEY?.replace(/\\n/g, '\n');
-  const publicKey = fs.readFileSync('public_key.pem', 'utf8').replace(/\\n/g, '\n');
+  // const publicKey = fs.readFileSync('publicKey_key.pem', 'utf8')
+  const publicKey = process.env.ZIP_ENCRYPTION_PUBLIC_KEY?.replace(/\\n/g, '\n');
 
   if (!publicKey) {
     throw new Error('ZIP_ENCRYPTION_PUBLIC_KEY environment variable is not set or is invalid.');
@@ -191,9 +191,8 @@ export function encryptZipFile(buffer: Buffer): { encrypted: Buffer; encryptedKe
  */
 export function decryptZipFile(encrypted: Buffer, encryptedKey: string): Buffer {
 
-  // const privateKey = process.env.ZIP_ENCRYPTION_PRIVATE_KEY?.replace(/\\n/g, '\n');
-  // const privateKey = process.env.ZIP_ENCRYPTION_PRIVATE_KEY?.replace(/\\n/g, '\n');
-  const privateKey = fs.readFileSync('private_key.pem', 'utf8').replace(/\\n/g, '\n');
+  const privateKey = process.env.ZIP_ENCRYPTION_PRIVATE_KEY?.replace(/\\n/g, '\n');
+  // const privateKey = fs.readFileSync('private_key.pem', 'utf8')
 
   if (!privateKey) {
     throw new Error('ZIP_ENCRYPTION_PRIVATE_KEY environment variable is not set or is invalid.');
