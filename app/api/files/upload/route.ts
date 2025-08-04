@@ -172,8 +172,8 @@ export async function POST(request: NextRequest) {
 
   try {
     // Log the configured max file size for debugging
-    const maxSize = parseInt(process.env.MAX_FILE_SIZE || '52428800');
-    console.log('Configured MAX_FILE_SIZE:', maxSize, 'bytes (', Math.round(maxSize / 1024 / 1024), 'MB)');
+    // const maxSize = parseInt(process.env.MAX_FILE_SIZE || '52428800');
+    // console.log('Configured MAX_FILE_SIZE:', maxSize, 'bytes (', Math.round(maxSize / 1024 / 1024), 'MB)');
 
     // Rate limiting
     // const rateLimitResult = await fileUploadRateLimiter.isAllowed(request);
@@ -372,14 +372,14 @@ export async function POST(request: NextRequest) {
       statusCode = 503;
     }
     
-    return NextResponse.json(
-      { 
-        error: errorMessage, 
-        details: err.message,
-        maxFileSize: process.env.MAX_FILE_SIZE || '52428800',
-        maxFileSizeMB: Math.round(parseInt(process.env.MAX_FILE_SIZE || '52428800') / 1024 / 1024)
-      },
-      { status: statusCode }
-    );
+    // return NextResponse.json(
+    //   { 
+    //     error: errorMessage, 
+    //     details: err.message,
+    //     maxFileSize: process.env.MAX_FILE_SIZE || '52428800',
+    //     maxFileSizeMB: Math.round(parseInt(process.env.MAX_FILE_SIZE || '52428800') / 1024 / 1024)
+    //   },
+    //   { status: statusCode }
+    // );
   }
 }

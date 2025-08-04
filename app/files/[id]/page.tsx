@@ -411,6 +411,7 @@ export default function FileDownloadPage() {
 		setDownloading(true);
 		setError("");
 		try {
+			console.log('Attempting selective download with paths:', selectedPaths);
 			const res = await fetch(
 				`/api/files/download/${fileId}${
 					fileInfo?.isPasswordProtected
@@ -424,22 +425,77 @@ export default function FileDownloadPage() {
 				}
 			);
 			if (!res.ok) {
-				const data = await res.json();
-				setError(data.error || "Download failed");
+				let errorMessage = "Download failed";
+				try {
+					const data = await res.json();
+					console.error('Selective download failed:', data);
+					errorMessage = data.error || "Download failed";
+					if (data.details) {
+						errorMessage += ` (${data.details})`;
+					}
+					if (data.requestedPaths && data.availablePaths) {
+						errorMessage += `\nRequested: ${data.requestedPaths.join(', ')}\nAvailable: ${data.availablePaths.slice(0, 5).join(', ')}...`;
+					}
+				} catch (parseError) {
+					console.error('Failed to parse error response:', parseError);
+					errorMessage = `Download failed (HTTP ${res.status})`;
+				}
+				setError(errorMessage);
 				setDownloading(false);
 				return;
 			}
-			const blob = await res.blob();
+			
+			// Check if response is actually a blob
+			const contentType = res.headers.get("Content-Type");
+			if (!contentType || !contentType.includes("application/zip")) {
+				console.error('Unexpected content type:', contentType);
+				setError("Download failed: Invalid response format");
+				setDownloading(false);
+				return;
+			}
+			
+			let blob;
+			try {
+				blob = await res.blob();
+				if (!blob || blob.size === 0) {
+					throw new Error("Empty response received");
+				}
+			} catch (blobError) {
+				console.error('Failed to create blob:', blobError);
+				setError("Download failed: Could not process file data");
+				setDownloading(false);
+				return;
+			}
+			
 			const url = window.URL.createObjectURL(blob);
 			const a = document.createElement("a");
 			a.href = url;
-			a.download = `${fileInfo?.name.replace(/\.zip$/, "")}_partial.zip`; // adds partial in the file name
+			
+			// Get filename from Content-Disposition header or use fallback
+			let filename = "partial_download.zip";
+			const contentDisposition = res.headers.get("Content-Disposition");
+			if (contentDisposition) {
+				const filenameMatch = contentDisposition.match(/filename="([^"]+)"/);
+				if (filenameMatch) {
+					filename = filenameMatch[1];
+				}
+			}
+			
+			// Fallback to using fileInfo if header parsing fails
+			if (filename === "partial_download.zip" && fileInfo?.original_name) {
+				const originalName = fileInfo.original_name || "archive";
+				filename = `${originalName.replace(/\.zip$/i, "")}_partial.zip`;
+			}
+			
+			a.download = filename;
 			document.body.appendChild(a);
 			a.click();
 			a.remove();
+			window.URL.revokeObjectURL(url); // Clean up the object URL
 			setDownloading(false);
 		} catch (e) {
-			setError("Download failed");
+			console.error('Selective download error:', e);
+			setError(`Download failed: ${e instanceof Error ? e.message : 'Unknown error'}`);
 			setDownloading(false);
 		}
 	};

@@ -16,12 +16,12 @@ const nextConfig = {
 	},
 
 	// Configure body size limits for API routes
-	api: {
-		bodyParser: {
-			sizeLimit: '50mb', // Allow up to 50MB for file uploads
-		},
-		responseLimit: false, // Disable response size limit
-	},
+	// api: {
+	// 	bodyParser: {
+	// 		sizeLimit: '50mb', // Allow up to 50MB for file uploads
+	// 	},
+	// 	responseLimit: false, // Disable response size limit
+	// },
 
 	webpack: (config, { isServer }) => {
 		config.ignoreWarnings = [

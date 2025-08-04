@@ -107,7 +107,7 @@ export default function Home() {
 						},
 						"featureList": [
 							"End-to-end encryption",
-							"Zero-knowledge architecture", 
+							"Zero-knowledge architecture",
 							"Anonymous file sharing",
 							"Ephemeral messaging",
 							"Virus scanning",
@@ -260,7 +260,7 @@ export default function Home() {
 			<nav className="fixed top-0 w-full z-50 bg-background/80 backdrop-blur-lg border-b border-border">
 				<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
 					<div className="flex items-center space-x-3"
-					onClick={ () => {window.location.href = "/"}}>
+						onClick={() => { window.location.href = "/" }}>
 						<div className="w-7 h-7 bg-primary rounded-lg flex items-center justify-center">
 							<Lock className="h-4 w-4 text-primary-foreground" />
 						</div>
@@ -372,7 +372,7 @@ export default function Home() {
 							</p>
 						</div>
 
-						<div className="fade-in flex flex-col sm:flex-row gap-4 justify-center mb-20">
+						<div className="fade-in flex flex-col sm:flex-row gap-4 justify-center mb-8">
 							<Link href="/files">
 								<Button
 									size={"lg"}
@@ -391,6 +391,16 @@ export default function Home() {
 									{/*Create room*/} Coming Soon
 								</Button>
 							</Link>
+						</div>
+
+						<div className="flex justify-center mb-10">
+						<Link href="https://peerlist.io/singhaman21/project/silentparcel--secure-file-sharing--chatting" target="_blank" rel="noreferrer" className="flex justify-center">
+							<img
+								src="https://peerlist.io/api/v1/projects/embed/PRJHOK8DE6B88R7JDIPJP7D89LQDGL?showUpvote=false&theme=light"
+								alt="SilentParcel - Secure File Sharing & Chatting"
+								style={{ width: "auto", height: "72px" }}
+							/>
+						</Link>
 						</div>
 
 						<div className="fade-in grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-8 max-w-xs sm:max-w-lg mx-auto">

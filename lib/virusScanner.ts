@@ -113,13 +113,13 @@ export class VirusScanner {
     }
 
     // Check file size limits - use environment variable or default to 50mb as fallback
-    const maxSize = parseInt(process.env.MAX_FILE_SIZE || '52428800'); // 50mb default
-    if (buffer.length > maxSize) {
-      return {
-        isClean: false,
-        message: 'File too large for scanning'
-      };
-    }
+    // const maxSize = parseInt(process.env.MAX_FILE_SIZE || '52428800'); // 50mb default
+    // if (buffer.length > maxSize) {
+    //   return {
+    //     isClean: false,
+    //     message: 'File too large for scanning'
+    //   };
+    // }
 
     // Calculate file hash for known malware database (placeholder)
     const hash = createHash('sha256').update(buffer as unknown as Uint8Array).digest('hex');
