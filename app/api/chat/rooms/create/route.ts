@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
 import { strictRateLimiter } from '@/lib/middleware/rateLimiter';
-import { generateId, generateRoomPassword, generateAvatarUrl, getClientIP } from '@/lib/security';
+import { generateId, generateRoomPassword, getClientIP } from '@/lib/security';
 import { supabaseAdmin } from '@/lib/supabase';
-import redis, { REDIS_KEYS, setWithExpiry } from '@/lib/redis';
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,9 +14,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { captchaToken, roomName } = await request.json();
+    const { captchaToken, roomName, expiryTime } = await request.json();
 
-    // Verify CAPTCHA
+    // Validate required fields
     if (!captchaToken) {
       return NextResponse.json(
         { error: 'CAPTCHA verification required' },
@@ -26,98 +24,92 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const captchaResponse = await fetch('https://hcaptcha.com/siteverify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `secret=${process.env.HCAPTCHA_SECRET_KEY}&response=${captchaToken}`
-    });
+    // Verify CAPTCHA (only if HCAPTCHA_SECRET_KEY is set)
+    if (process.env.HCAPTCHA_SECRET_KEY) {
+      try {
+        const captchaResponse = await fetch('https://hcaptcha.com/siteverify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `secret=${process.env.HCAPTCHA_SECRET_KEY}&response=${captchaToken}`
+        });
 
-    const captchaData = await captchaResponse.json();
-    if (!captchaData.success) {
-      return NextResponse.json(
-        { error: 'CAPTCHA verification failed' },
-        { status: 400 }
-      );
+        const captchaData = await captchaResponse.json();
+        if (!captchaData.success) {
+          return NextResponse.json(
+            { error: 'CAPTCHA verification failed' },
+            { status: 400 }
+          );
+        }
+      } catch (captchaError) {
+        console.error('CAPTCHA verification error:', captchaError);
+        // Continue without CAPTCHA if there's an error
+        console.warn('Proceeding without CAPTCHA verification due to error');
+      }
+    } else {
+      console.warn('HCAPTCHA_SECRET_KEY not set, skipping CAPTCHA verification');
     }
 
     // Generate room data
-    const roomId = generateId();
+    const roomId = generateId().substring(0, 8); // Ensure 8 characters
     const roomPassword = generateRoomPassword();
     const creatorId = generateId();
     const creatorUsername = `User_${Math.random().toString(36).substr(2, 6)}`;
-    const creatorAvatar = generateAvatarUrl(creatorId);
 
-    // Create room in database
-    const room = await databases.createDocument(
-      DATABASE_ID,
-      COLLECTIONS.CHAT_ROOMS,
-      roomId,
-      {
+    // Create room in Supabase
+    const { data: room, error: roomError } = await supabaseAdmin
+      .from('chat_rooms')
+      .insert({
+        room_id: roomId,
         name: roomName || 'Anonymous Room',
         password: roomPassword,
-        createdBy: creatorId,
-        createdAt: new Date().toISOString(),
-        isActive: true,
-        maxUsers: parseInt(process.env.MAX_ROOM_USERS || '10'),
-        userCount: 1
-      }
-    );
+        expiry_time: expiryTime || '1h',
+        created_by: creatorId,
+        is_active: true
+      })
+      .select()
+      .single();
 
-    // Create creator user record
-    const creator = await databases.createDocument(
-      DATABASE_ID,
-      COLLECTIONS.USERS,
-      creatorId,
-      {
+    if (roomError) {
+      console.error('Error creating room:', roomError);
+      return NextResponse.json(
+        { error: 'Failed to create room. Please try again.' },
+        { status: 500 }
+      );
+    }
+
+    // Create creator as participant
+    const { error: participantError } = await supabaseAdmin
+      .from('chat_participants')
+      .insert({
+        room_id: roomId,
         username: creatorUsername,
-        avatar: creatorAvatar,
-        roomId: roomId,
-        isCreator: true,
-        joinedAt: new Date().toISOString(),
-        isActive: true
-      }
-    );
+        user_id: creatorId,
+        is_online: true
+      });
 
-    // Store room data in Redis
-    const roomData = {
-      id: roomId,
-      name: roomName || 'Anonymous Room',
-      password: roomPassword,
-      createdBy: creatorId,
-      users: [{
-        id: creatorId,
-        username: creatorUsername,
-        avatar: creatorAvatar,
-        isCreator: true,
-        joinedAt: new Date().toISOString()
-      }],
-      messages: [],
-      createdAt: new Date().toISOString(),
-      lastActivity: new Date().toISOString()
-    };
-
-    await setWithExpiry(
-      REDIS_KEYS.CHAT_ROOM(roomId),
-      JSON.stringify(roomData),
-      parseInt(process.env.ROOM_INACTIVITY_TIMEOUT || '3600') // 1 hour default
-    );
-
-    // Add user to room users set
-    await redis.sadd(REDIS_KEYS.CHAT_USERS(roomId), creatorId);
+    if (participantError) {
+      console.error('Error creating participant:', participantError);
+      // Don't fail the request, just log the error
+    }
 
     // Log audit event
-    await supabaseAdmin.from('audit_logs').insert({
-      action: 'room_create',
-      resource_type: 'chat_room',
-      resource_id: roomId,
-      user_id: creatorId,
-      ip_address: getClientIP(request),
-      // // user_agent: request.headers.get('user-agent'),
-      metadata: {
-        roomName: roomName || 'Anonymous Room',
-        username: creatorUsername
-      }
-    });
+    try {
+      await supabaseAdmin.from('audit_logs').insert({
+        action: 'room_create',
+        resource_type: 'chat_room',
+        resource_id: roomId,
+        user_id: creatorId,
+        ip_address: getClientIP(request),
+        metadata: {
+          roomName: roomName || 'Anonymous Room',
+          username: creatorUsername,
+          expiryTime: expiryTime || '1h'
+        }
+      });
+    } catch (auditError) {
+      console.error('Error logging audit event:', auditError);
+      // Don't fail the request if audit logging fails
+    }
 
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || request.nextUrl.origin;
     const roomUrl = `${baseUrl}/rooms/${roomId}`;
@@ -129,18 +121,35 @@ export async function POST(request: NextRequest) {
         name: roomName || 'Anonymous Room',
         password: roomPassword,
         url: roomUrl,
-        maxUsers: parseInt(process.env.MAX_ROOM_USERS || '10')
+        expiryTime: expiryTime || '1h',
+        expiresAt: room.expires_at
       },
       user: {
         id: creatorId,
         username: creatorUsername,
-        avatar: creatorAvatar,
         isCreator: true
       }
     });
 
   } catch (error) {
     console.error('Room creation error:', error);
+    
+    // Provide more specific error messages based on error type
+    if (error instanceof Error) {
+      if (error.message.includes('rate limit')) {
+        return NextResponse.json(
+          { error: 'Too many requests. Please try again later.' },
+          { status: 429 }
+        );
+      }
+      if (error.message.includes('database')) {
+        return NextResponse.json(
+          { error: 'Database error. Please try again.' },
+          { status: 500 }
+        );
+      }
+    }
+    
     return NextResponse.json(
       { error: 'Failed to create room. Please try again.' },
       { status: 500 }
