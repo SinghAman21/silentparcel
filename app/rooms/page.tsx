@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { ArrowLeft, MessageSquare, Users, Shield, Clock, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,11 +16,6 @@ export default function RoomsPage() {
   const { toast } = useToast();
   const [joinInput, setJoinInput] = useState('');
   const [isJoining, setIsJoining] = useState(false);
-  const [isClient, setIsClient] = useState(false);
-
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
 
   const handleJoinRoom = async () => {
     if (!joinInput.trim()) {
@@ -68,35 +63,8 @@ export default function RoomsPage() {
     router.push('/rooms/create');
   };
 
-  // Show loading state until client is ready
-  if (!isClient) {
-    return (
-      <div className="min-h-screen bg-background">
-        <header className="border-b border-border/40 backdrop-blur-xs bg-background/80 sticky top-0 z-50">
-          <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-            <Link href="/">
-              <Button variant="ghost" size="sm" className="hover:bg-accent/50">
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back to Home
-              </Button>
-            </Link>
-            <ThemeToggle />
-          </div>
-        </header>
-        <div className="container mx-auto px-4 py-8 max-w-2xl">
-          <div className="text-center">
-            <div className="animate-pulse">
-              <div className="h-8 bg-muted rounded w-64 mx-auto mb-4"></div>
-              <div className="h-4 bg-muted rounded w-96 mx-auto"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-background" suppressHydrationWarning>
+    <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border/40 backdrop-blur-xs bg-background/80 sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">

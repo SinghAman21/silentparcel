@@ -45,19 +45,26 @@ export function ChatInterface({ roomId, roomPassword, onLeave }: ChatInterfacePr
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Generate random user data
+  // Initialize room data
   useEffect(() => {
     const colors = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899'];
     const avatars = ['🦊', '🐺', '🦝', '🐧', '🦔', '🐨', '🐯', '🦁', '🐸', '🐙'];
     const adjectives = ['Swift', 'Silent', 'Mystic', 'Shadow', 'Neon', 'Cyber', 'Phantom', 'Eclipse'];
     const nouns = ['Fox', 'Wolf', 'Raven', 'Phoenix', 'Dragon', 'Tiger', 'Panther', 'Viper'];
     
+    // Use roomId as seed for consistent generation
+    const seed = roomId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const seededRandom = (max: number) => {
+      const x = Math.sin(seed) * 10000;
+      return Math.floor((x - Math.floor(x)) * max);
+    };
+    
     const generateUser = (isAdmin = false): User => ({
-      id: Math.random().toString(36).substring(2),
-      name: `${adjectives[Math.floor(Math.random() * adjectives.length)]}${nouns[Math.floor(Math.random() * nouns.length)]}${Math.floor(Math.random() * 99)}`,
-      color: colors[Math.floor(Math.random() * colors.length)],
+      id: `user_${seededRandom(1000000)}`,
+      name: `${adjectives[seededRandom(adjectives.length)]}${nouns[seededRandom(nouns.length)]}${seededRandom(99)}`,
+      color: colors[seededRandom(colors.length)],
       isAdmin,
-      avatar: avatars[Math.floor(Math.random() * avatars.length)]
+      avatar: avatars[seededRandom(avatars.length)]
     });
 
     // Create current user as admin
@@ -65,7 +72,7 @@ export function ChatInterface({ roomId, roomPassword, onLeave }: ChatInterfacePr
     setCurrentUser(admin);
     
     // Generate some other users
-    const otherUsers = Array.from({ length: Math.floor(Math.random() * 4) + 1 }, () => generateUser());
+    const otherUsers = Array.from({ length: seededRandom(4) + 1 }, () => generateUser());
     setUsers([admin, ...otherUsers]);
 
     // Add welcome message
@@ -78,7 +85,7 @@ export function ChatInterface({ roomId, roomPassword, onLeave }: ChatInterfacePr
         type: 'system'
       }
     ]);
-  }, []);
+  }, [roomId]);
 
   // Timer countdown
   useEffect(() => {
@@ -104,7 +111,7 @@ export function ChatInterface({ roomId, roomPassword, onLeave }: ChatInterfacePr
     if (!message.trim() || !currentUser) return;
 
     const newMessage: Message = {
-      id: Date.now().toString(),
+      id: `msg_${Date.now()}_${Math.random().toString(36).substring(2)}`,
       user: currentUser.name,
       content: message,
       timestamp: new Date(),
@@ -120,7 +127,7 @@ export function ChatInterface({ roomId, roomPassword, onLeave }: ChatInterfacePr
     const kickedUser = users.find(u => u.id === userId);
     if (kickedUser) {
       setMessages(prev => [...prev, {
-        id: Date.now().toString(),
+        id: `sys_${Date.now()}_${Math.random().toString(36).substring(2)}`,
         user: 'System',
         content: `${kickedUser.name} was kicked from the room`,
         timestamp: new Date(),

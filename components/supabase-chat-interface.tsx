@@ -39,7 +39,7 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave 
     updateParticipantStatus
   } = useSupabaseChat(roomId);
 
-  // Use userData if provided, otherwise generate random username
+  // Set username on mount
   useEffect(() => {
     if (userData?.username) {
       setUsername(userData.username);
@@ -47,10 +47,18 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave 
     } else if (!username) {
       const adjectives = ['Swift', 'Silent', 'Mystic', 'Shadow', 'Neon', 'Cyber', 'Phantom', 'Eclipse'];
       const nouns = ['Fox', 'Wolf', 'Raven', 'Phoenix', 'Dragon', 'Tiger', 'Panther', 'Viper'];
-      const randomUsername = `${adjectives[Math.floor(Math.random() * adjectives.length)]}${nouns[Math.floor(Math.random() * nouns.length)]}${Math.floor(Math.random() * 99)}`;
+      
+      // Use roomId as seed for consistent generation
+      const seed = roomId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      const seededRandom = (max: number) => {
+        const x = Math.sin(seed) * 10000;
+        return Math.floor((x - Math.floor(x)) * max);
+      };
+      
+      const randomUsername = `${adjectives[seededRandom(adjectives.length)]}${nouns[seededRandom(nouns.length)]}${seededRandom(99)}`;
       setUsername(randomUsername);
     }
-  }, [username, userData]);
+  }, [username, userData, roomId]);
 
   // Join room when username is set
   useEffect(() => {

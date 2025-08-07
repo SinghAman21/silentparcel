@@ -358,7 +358,7 @@ export default function Home() {
 				<section className="pt-32 pb-20 px-8">
 					<div className="max-w-4xl mx-auto text-center">
 						<div className="fade-in mb-8">
-							<span suppressHydrationWarning className="inline-block px-4 py-2 bg-muted rounded-full text-sm font-medium text-muted-foreground mb-8">
+							<span className="inline-block px-4 py-2 bg-muted rounded-full text-sm font-medium text-muted-foreground mb-8">
 								Trusted by many privacy-conscious users
 							</span>
 							<h1 className="text-6xl md:text-7xl font-light text-foreground leading-[0.9] mb-8 tracking-tight">

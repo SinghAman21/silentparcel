@@ -4,9 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "rm -rf .next && rm -f tsconfig.tsbuildinfo && next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "clean": "rm -rf .next && rm -f tsconfig.tsbuildinfo && rm -rf node_modules/.cache",
+    "build:clean": "npm run clean && npm run build"
   },
   "dependencies": {
     "@gsap/react": "^2.1.2",

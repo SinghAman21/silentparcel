@@ -24,13 +24,11 @@ export default function ChatRoomPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isCheckingRoom, setIsCheckingRoom] = useState(true);
   const [userData, setUserData] = useState(null);
-  const [isClient, setIsClient] = useState(false);
   const [roomInfo, setRoomInfo] = useState(null);
 
   const roomId = params.id as string;
 
   useEffect(() => {
-    setIsClient(true);
     checkRoomExists();
   }, [roomId]);
 
@@ -111,8 +109,8 @@ export default function ChatRoomPage() {
     }
   };
 
-  // Show loading state until client is ready
-  if (!isClient || isCheckingRoom) {
+  // Show loading state while checking room
+  if (isCheckingRoom) {
     return (
       <div className="min-h-screen bg-background">
         <header className="border-b border-border/40 backdrop-blur-xs bg-background/80 sticky top-0 z-50">
@@ -140,7 +138,7 @@ export default function ChatRoomPage() {
 
   if (!roomExists) {
     return (
-      <div className="min-h-screen bg-background" suppressHydrationWarning>
+      <div className="min-h-screen bg-background">
         <header className="border-b border-border/40 backdrop-blur-xs bg-background/80 sticky top-0 z-50">
           <div className="container mx-auto px-4 py-4 flex items-center justify-between">
             <Link href="/rooms">
@@ -180,7 +178,7 @@ export default function ChatRoomPage() {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-background" suppressHydrationWarning>
+      <div className="min-h-screen bg-background">
         <header className="border-b border-border/40 backdrop-blur-xs bg-background/80 sticky top-0 z-50">
           <div className="container mx-auto px-4 py-4 flex items-center justify-between">
             <Link href="/rooms">
@@ -200,29 +198,18 @@ export default function ChatRoomPage() {
                 <Shield className="h-5 w-5 mr-2" />
                 Join Chat Room
               </CardTitle>
-              {roomInfo && (
-                <div className="text-sm text-muted-foreground">
-                  <p><strong>Room:</strong> {roomInfo.name}</p>
-                  <p><strong>Participants:</strong> {roomInfo.participantCount}</p>
-                  <p><strong>Messages:</strong> {roomInfo.messageCount}</p>
-                </div>
-              )}
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="username">Username (Optional)</Label>
                 <Input
                   id="username"
-                  placeholder="Enter your username"
+                  placeholder="Anonymous User"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="bg-background/50"
                 />
-                <p className="text-xs text-muted-foreground">
-                  Leave empty for auto-generated username
-                </p>
               </div>
-              
               <div className="space-y-2">
                 <Label htmlFor="password">Room Password</Label>
                 <Input
@@ -231,22 +218,21 @@ export default function ChatRoomPage() {
                   placeholder="Enter room password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleJoinRoom()}
                   className="bg-background/50"
+                  onKeyDown={(e) => e.key === 'Enter' && handleJoinRoom()}
                 />
-                {error && (
-                  <p className="text-sm text-destructive">{error}</p>
-                )}
               </div>
-              
+              {error && (
+                <div className="text-red-600 text-sm">{error}</div>
+              )}
               <Button 
-                onClick={handleJoinRoom} 
-                disabled={!password.trim() || isLoading} 
+                onClick={handleJoinRoom}
+                disabled={isLoading}
                 className="w-full hover:scale-105 transition-transform"
               >
                 {isLoading ? (
                   <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Joining...
                   </>
                 ) : (
@@ -261,12 +247,23 @@ export default function ChatRoomPage() {
   }
 
   return (
-    <div suppressHydrationWarning>
+    <div className="min-h-screen bg-background">
+      <header className="border-b border-border/40 backdrop-blur-xs bg-background/80 sticky top-0 z-50">
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+          <Link href="/rooms">
+            <Button variant="ghost" size="sm" className="hover:bg-accent/50">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Rooms
+            </Button>
+          </Link>
+          <ThemeToggle />
+        </div>
+      </header>
+
       <SupabaseChatInterface 
         roomId={roomId}
-        roomPassword={password}
-        // userData={userData}
-        onLeave={() => router.push('/rooms')}
+        userData={userData}
+        roomInfo={roomInfo}
       />
     </div>
   );

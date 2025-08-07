@@ -139,30 +139,8 @@ export default function RootLayout({
 	children: React.ReactNode;
 }) {
 	return (
-		<html lang="en" suppressHydrationWarning>
+		<html lang="en">
 			<head>
-				{/* Hydration Error Suppressor */}
-				<Script id="hydration-suppressor" strategy="beforeInteractive">
-					{`
-						// Suppress hydration warnings globally
-						if (typeof window !== 'undefined') {
-							const originalError = console.error;
-							console.error = (...args) => {
-								const message = args[0];
-								if (typeof message === 'string' && (
-									message.includes('Hydration failed') ||
-									message.includes('Text content does not match') ||
-									message.includes('Expected server HTML to contain') ||
-									message.includes('Did not expect server HTML to contain')
-								)) {
-									return;
-								}
-								originalError.apply(console, args);
-							};
-						}
-					`}
-				</Script>
-
 				{/* Google Analytics */}
 				{/* for domain analytics */}
 				<Script
@@ -188,7 +166,7 @@ export default function RootLayout({
 					gtag('config', 'G-PMRFNG45RF');`}
 				</Script> */}
 			</head>
-			<body className={`${Inter.variable} ${JetbrainsMono.variable}`} suppressHydrationWarning>
+			<body className={`${Inter.variable} ${JetbrainsMono.variable}`}>
 				{/* Temporarily disabled UTM tracking to debug 500 error */}
 				<UTMTrackerWrapper />
 				<ThemeProvider
