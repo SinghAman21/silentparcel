@@ -7,10 +7,12 @@ import { UTMTrackerWrapper } from "@/components/utm-tracker-wrapper";
 
 export const metadata: Metadata = {
 	title: {
-		default: "SilentParcel - Secure File Sharing & Anonymous Chat | Zero-Knowledge Encryption",
-		template: "%s | SilentParcel"
+		default:
+			"SilentParcel - Secure File Sharing & Anonymous Chat | Zero-Knowledge Encryption",
+		template: "%s | SilentParcel",
 	},
-	description: "Share files securely with end-to-end encryption and chat anonymously in ephemeral rooms. No registration required. Military-grade AES-256 encryption with automatic virus scanning.",
+	description:
+		"Share files securely with end-to-end encryption and chat anonymously in ephemeral rooms. No registration required. Military-grade AES-256 encryption with automatic virus scanning.",
 	keywords: [
 		"secure file sharing",
 		"encrypted file transfer",
@@ -26,7 +28,7 @@ export const metadata: Metadata = {
 		"virus scanning",
 		"password protection",
 		"self-destructing files",
-		"privacy tools"
+		"privacy tools",
 	],
 	authors: [{ name: "Aman Singh" }],
 	creator: "SilentParcel",
@@ -36,9 +38,9 @@ export const metadata: Metadata = {
 		address: false,
 		telephone: false,
 	},
-	metadataBase: new URL('https://silentparcel.com'),
+	metadataBase: new URL("https://silentparcel.com"),
 	alternates: {
-		canonical: '/',
+		canonical: "/",
 	},
 	// icons: {
 	// 	icon: [
@@ -72,27 +74,29 @@ export const metadata: Metadata = {
 	// 	],
 	// },
 	openGraph: {
-		type: 'website',
-		locale: 'en_US',
-		url: 'https://silentparcel.com',
-		title: 'SilentParcel - Secure File Sharing & Anonymous Chat',
-		description: 'Share files securely with end-to-end encryption and chat anonymously in ephemeral rooms. No registration required.',
-		siteName: 'SilentParcel',
+		type: "website",
+		locale: "en_US",
+		url: "https://silentparcel.com",
+		title: "SilentParcel - Secure File Sharing & Anonymous Chat",
+		description:
+			"Share files securely with end-to-end encryption and chat anonymously in ephemeral rooms. No registration required.",
+		siteName: "SilentParcel",
 		images: [
 			{
-				url: '/og-image.png',
+				url: "/og-image.png",
 				width: 1200,
 				height: 630,
-				alt: 'SilentParcel - Secure File Sharing Platform',
+				alt: "SilentParcel - Secure File Sharing Platform",
 			},
 		],
 	},
 	twitter: {
-		card: 'summary_large_image',
-		title: 'SilentParcel - Secure File Sharing & Anonymous Chat',
-		description: 'Share files securely with end-to-end encryption and chat anonymously in ephemeral rooms.',
-		images: ['/og-image.png'],
-		creator: '@silentparcel',
+		card: "summary_large_image",
+		title: "SilentParcel - Secure File Sharing & Anonymous Chat",
+		description:
+			"Share files securely with end-to-end encryption and chat anonymously in ephemeral rooms.",
+		images: ["/og-image.png"],
+		creator: "@silentparcel",
 	},
 	robots: {
 		index: true,
@@ -100,18 +104,18 @@ export const metadata: Metadata = {
 		googleBot: {
 			index: true,
 			follow: true,
-			'max-video-preview': -1,
-			'max-image-preview': 'large',
-			'max-snippet': -1,
+			"max-video-preview": -1,
+			"max-image-preview": "large",
+			"max-snippet": -1,
 		},
 	},
 	verification: {
-		google: 'your-google-verification-code',
-		yandex: 'your-yandex-verification-code',
-		yahoo: 'your-yahoo-verification-code',
+		google: "your-google-verification-code",
+		yandex: "your-yandex-verification-code",
+		yahoo: "your-yahoo-verification-code",
 	},
-	category: 'technology',
-	classification: 'File Sharing & Communication',
+	category: "technology",
+	classification: "File Sharing & Communication",
 };
 const Inter = localFont({
 	src: [
@@ -139,7 +143,7 @@ export default function RootLayout({
 	children: React.ReactNode;
 }) {
 	return (
-		<html lang="en">
+		<html lang="en" suppressHydrationWarning>
 			<head>
 				{/* Google Analytics */}
 				{/* for domain analytics */}
@@ -156,7 +160,7 @@ export default function RootLayout({
 					`}
 				</Script>
 
-					{/* for vercel analytics */}
+				{/* for vercel analytics */}
 				{/* <Script src="https://www.googletagmanager.com/gtag/js?id=G-PMRFNG45RF" strategy="afterInteractive" />
 				<Script id="google-analytics" strategy="afterInteractive">
 					{`window.dataLayer = window.dataLayer || [];

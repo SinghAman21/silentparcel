@@ -5,8 +5,19 @@ const nextConfig = {
 	},
 
 	images: {
-		domains: ["api.dicebear.com"],
-		formats: ["image/webp", "image/avif"],
+		dangerouslyAllowSVG: true,
+		remotePatterns: [
+			{
+				protocol: "https",
+				hostname: "api.dicebear.com",
+				pathname: "/**", 
+			},
+			{
+				protocol: "https",
+				hostname: "peerlist.io",
+				pathname: "/**",
+			},
+		],
 	},
 
 	serverExternalPackages: ["ioredis"],
@@ -64,13 +75,19 @@ const nextConfig = {
 					{ key: "X-Frame-Options", value: "DENY" },
 					{ key: "X-XSS-Protection", value: "1; mode=block" },
 					{ key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-					{ key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
-					
+					{
+						key: "Permissions-Policy",
+						value: "camera=(), microphone=(), geolocation=()",
+					},
+
 					// SEO Headers
 					{ key: "X-Robots-Tag", value: "index, follow" },
-					
+
 					// Performance Headers
-					{ key: "Cache-Control", value: "public, max-age=31536000, immutable" },
+					{
+						key: "Cache-Control",
+						value: "public, max-age=31536000, immutable",
+					},
 				],
 			},
 			{
@@ -100,35 +117,35 @@ const nextConfig = {
 	// SEO and Performance Optimizations
 	poweredByHeader: false,
 	compress: true,
-	
+
 	// Enable experimental features for better performance
 	experimental: {
 		optimizeCss: true,
-		optimizePackageImports: ['lucide-react', '@radix-ui/react-icons'],
+		optimizePackageImports: ["lucide-react", "@radix-ui/react-icons"],
 	},
-	
+
 	// Redirects for SEO
 	async redirects() {
 		return [
 			{
-				source: '/home',
-				destination: '/',
+				source: "/home",
+				destination: "/",
 				permanent: true,
 			},
 			{
-				source: '/index.html',
-				destination: '/',
+				source: "/index.html",
+				destination: "/",
 				permanent: true,
 			},
 		];
 	},
-	
+
 	// Rewrites for clean URLs
 	async rewrites() {
 		return [
 			{
-				source: '/sitemap.xml',
-				destination: '/api/sitemap',
+				source: "/sitemap.xml",
+				destination: "/api/sitemap",
 			},
 		];
 	},

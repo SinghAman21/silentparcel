@@ -21,6 +21,7 @@ import ThemeToggle from "@/components/theme-toggle";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Script from "next/script";
+import Image from "next/image";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -62,6 +63,38 @@ export default function Home() {
 			}
 		);
 
+		const tl = gsap.timeline();
+
+		tl.from("#peerlistBtn img", {
+			scale: 0.8,
+			opacity: 0,
+			rotate: -10,
+			y: 20,
+			ease: "back.out(1.4)",
+			duration: 0.8,
+		})
+
+			.to(
+				"#peerlistBtn img",
+				{
+					scale: 1.05,
+					duration: 0.2,
+					yoyo: true,
+					repeat: 1,
+					ease: "power1.inOut",
+				},
+				"-=0.4"
+			)
+
+			.to(
+				"#peerlistBtn img",
+				{
+					filter: "drop-shadow(0 0 8px rgba(255, 215, 0, 0.4))",
+					duration: 0.2,
+				},
+				"-=0.3"
+			);
+
 		gsap.utils.toArray<HTMLElement>("section").forEach((section, i) => {
 			gsap.fromTo(
 				section,
@@ -95,17 +128,18 @@ export default function Home() {
 					__html: JSON.stringify({
 						"@context": "https://schema.org",
 						"@type": "WebApplication",
-						"name": "SilentParcel",
-						"description": "Share files securely with end-to-end encryption and chat anonymously in ephemeral rooms. No registration required. Military-grade AES-256 encryption with automatic virus scanning.",
-						"url": "https://silentparcel.com",
-						"applicationCategory": "ProductivityApplication",
-						"operatingSystem": "Web Browser",
-						"offers": {
+						name: "SilentParcel",
+						description:
+							"Share files securely with end-to-end encryption and chat anonymously in ephemeral rooms. No registration required. Military-grade AES-256 encryption with automatic virus scanning.",
+						url: "https://silentparcel.com",
+						applicationCategory: "ProductivityApplication",
+						operatingSystem: "Web Browser",
+						offers: {
 							"@type": "Offer",
-							"price": "0",
-							"priceCurrency": "USD"
+							price: "0",
+							priceCurrency: "USD",
 						},
-						"featureList": [
+						featureList: [
 							"End-to-end encryption",
 							"Zero-knowledge architecture",
 							"Anonymous file sharing",
@@ -113,55 +147,57 @@ export default function Home() {
 							"Virus scanning",
 							"Password protection",
 							"Self-destructing files",
-							"No registration required"
+							"No registration required",
 						],
-						"author": {
+						author: {
 							"@type": "Organization",
-							"name": "Aman Singh"
+							name: "Aman Singh",
 						},
-						"publisher": {
+						publisher: {
 							"@type": "Organization",
-							"name": "SilentParcel"
+							name: "SilentParcel",
 						},
-						"aggregateRating": {
+						aggregateRating: {
 							"@type": "AggregateRating",
-							"ratingValue": "4.9",
-							"ratingCount": "1250",
-							"bestRating": "5",
-							"worstRating": "1"
+							ratingValue: "4.9",
+							ratingCount: "1250",
+							bestRating: "5",
+							worstRating: "1",
 						},
-						"review": [
+						review: [
 							{
 								"@type": "Review",
-								"author": {
+								author: {
 									"@type": "Person",
-									"name": "Sarah Chen"
+									name: "Sarah Chen",
 								},
-								"reviewBody": "Finally, a file sharing tool I can trust with sensitive source documents. The zero-knowledge architecture gives me complete peace of mind.",
-								"reviewRating": {
+								reviewBody:
+									"Finally, a file sharing tool I can trust with sensitive source documents. The zero-knowledge architecture gives me complete peace of mind.",
+								reviewRating: {
 									"@type": "Rating",
-									"ratingValue": "5",
-									"bestRating": "5"
-								}
+									ratingValue: "5",
+									bestRating: "5",
+								},
 							},
 							{
 								"@type": "Review",
-								"author": {
+								author: {
 									"@type": "Person",
-									"name": "Marcus Rivera"
+									name: "Marcus Rivera",
 								},
-								"reviewBody": "We use SilentParcel for all confidential client communications. The ephemeral nature and audit trail give us the security we need.",
-								"reviewRating": {
+								reviewBody:
+									"We use SilentParcel for all confidential client communications. The ephemeral nature and audit trail give us the security we need.",
+								reviewRating: {
 									"@type": "Rating",
-									"ratingValue": "5",
-									"bestRating": "5"
-								}
-							}
+									ratingValue: "5",
+									bestRating: "5",
+								},
+							},
 						],
-						"softwareVersion": "1.0.0",
-						"datePublished": "2024-01-01",
-						"dateModified": new Date().toISOString().split('T')[0]
-					})
+						softwareVersion: "1.0.0",
+						datePublished: "2024-01-01",
+						dateModified: new Date().toISOString().split("T")[0],
+					}),
 				}}
 			/>
 
@@ -173,21 +209,22 @@ export default function Home() {
 					__html: JSON.stringify({
 						"@context": "https://schema.org",
 						"@type": "Organization",
-						"name": "SilentParcel",
-						"url": "https://silentparcel.com",
-						"logo": "https://silentparcel.com/logo.png",
-						"description": "Privacy-focused secure file sharing and anonymous chat platform",
-						"foundingDate": "2024",
-						"sameAs": [
+						name: "SilentParcel",
+						url: "https://silentparcel.com",
+						logo: "https://silentparcel.com/logo.png",
+						description:
+							"Privacy-focused secure file sharing and anonymous chat platform",
+						foundingDate: "2024",
+						sameAs: [
 							"https://twitter.com/silentparcel",
-							"https://github.com/silentparcel"
+							"https://github.com/silentparcel",
 						],
-						"contactPoint": {
+						contactPoint: {
 							"@type": "ContactPoint",
-							"contactType": "customer service",
-							"email": "singhaman21@proton.me"
-						}
-					})
+							contactType: "customer service",
+							email: "singhaman21@proton.me",
+						},
+					}),
 				}}
 			/>
 
@@ -199,15 +236,15 @@ export default function Home() {
 					__html: JSON.stringify({
 						"@context": "https://schema.org",
 						"@type": "BreadcrumbList",
-						"itemListElement": [
+						itemListElement: [
 							{
 								"@type": "ListItem",
-								"position": 1,
-								"name": "Home",
-								"item": "https://silentparcel.com"
-							}
-						]
-					})
+								position: 1,
+								name: "Home",
+								item: "https://silentparcel.com",
+							},
+						],
+					}),
 				}}
 			/>
 
@@ -219,48 +256,52 @@ export default function Home() {
 					__html: JSON.stringify({
 						"@context": "https://schema.org",
 						"@type": "FAQPage",
-						"mainEntity": [
+						mainEntity: [
 							{
 								"@type": "Question",
-								"name": "How secure is SilentParcel?",
-								"acceptedAnswer": {
+								name: "How secure is SilentParcel?",
+								acceptedAnswer: {
 									"@type": "Answer",
-									"text": "SilentParcel uses military-grade AES-256 encryption with zero-knowledge architecture. Files are encrypted in your browser before upload, and we cannot access your data even if we wanted to."
-								}
+									text: "SilentParcel uses military-grade AES-256 encryption with zero-knowledge architecture. Files are encrypted in your browser before upload, and we cannot access your data even if we wanted to.",
+								},
 							},
 							{
 								"@type": "Question",
-								"name": "Do I need to create an account?",
-								"acceptedAnswer": {
+								name: "Do I need to create an account?",
+								acceptedAnswer: {
 									"@type": "Answer",
-									"text": "No, SilentParcel requires no registration or account creation. You can start sharing files immediately while maintaining complete anonymity."
-								}
+									text: "No, SilentParcel requires no registration or account creation. You can start sharing files immediately while maintaining complete anonymity.",
+								},
 							},
 							{
 								"@type": "Question",
-								"name": "What happens to my files after sharing?",
-								"acceptedAnswer": {
+								name: "What happens to my files after sharing?",
+								acceptedAnswer: {
 									"@type": "Answer",
-									"text": "Files are automatically deleted after download or when they expire. This ensures no traces are left behind on our servers."
-								}
+									text: "Files are automatically deleted after download or when they expire. This ensures no traces are left behind on our servers.",
+								},
 							},
 							{
 								"@type": "Question",
-								"name": "Is virus scanning included?",
-								"acceptedAnswer": {
+								name: "Is virus scanning included?",
+								acceptedAnswer: {
 									"@type": "Answer",
-									"text": "Yes, all uploaded files are automatically scanned for viruses and malware before being made available for download."
-								}
-							}
-						]
-					})
+									text: "Yes, all uploaded files are automatically scanned for viruses and malware before being made available for download.",
+								},
+							},
+						],
+					}),
 				}}
 			/>
 
 			<nav className="fixed top-0 w-full z-50 bg-background/80 backdrop-blur-lg border-b border-border">
 				<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-					<div className="flex items-center space-x-3"
-						onClick={() => { window.location.href = "/" }}>
+					<div
+						className="flex items-center space-x-3"
+						onClick={() => {
+							window.location.href = "/";
+						}}
+					>
 						<div className="w-7 h-7 bg-primary rounded-lg flex items-center justify-center">
 							<Lock className="h-4 w-4 text-primary-foreground" />
 						</div>
@@ -393,14 +434,22 @@ export default function Home() {
 							</Link>
 						</div>
 
-						<div className="flex justify-center mb-10">
-						<Link href="https://peerlist.io/singhaman21/project/silentparcel--secure-file-sharing--chatting" target="_blank" rel="noreferrer" className="flex justify-center">
-							<img
-								src="https://peerlist.io/api/v1/projects/embed/PRJHOK8DE6B88R7JDIPJP7D89LQDGL?showUpvote=false&theme=light"
-								alt="SilentParcel - Secure File Sharing & Chatting"
-								style={{ width: "auto", height: "72px" }}
-							/>
-						</Link>
+						<div className="flex justify-center mb-10" id="peerlistBtn">
+							<Link
+								href="https://peerlist.io/singhaman21/project/silentparcel--secure-file-sharing--chatting"
+								target="_blank"
+								rel="noreferrer"
+								className="flex justify-center transition-filter duration-300 [filter:drop-shadow(0_0_8px_rgba(255,215,0,0.3))]"
+							>
+								<Image
+									src="https://peerlist.io/api/v1/projects/embed/PRJHOK8DE6B88R7JDIPJP7D89LQDGL?showUpvote=false&theme=light"
+									alt="SilentParcel - Secure File Sharing & Chatting"
+									height={200}
+									width={200}
+									className="w-auto"
+									style={{ width: "auto", height: "60px" }}
+								/>
+							</Link>
 						</div>
 
 						<div className="fade-in grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-8 max-w-xs sm:max-w-lg mx-auto">
@@ -850,7 +899,8 @@ export default function Home() {
 						</div>
 					</div>
 					<div className="mt-8 pt-8 border-t border-border text-center text-sm text-muted-foreground">
-						&copy; 2025 SilentParcel. Crafted for privacy, by privacy-conscious users.
+						&copy; 2025 SilentParcel. Crafted for privacy, by privacy-conscious
+						users.
 					</div>
 				</div>
 			</footer>
