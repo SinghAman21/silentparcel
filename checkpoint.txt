@@ -2,12 +2,5 @@ api setup complete --> all done
 captcha not working  --> captcha working (kept on hold due to development) --> removing while uploading, thinking to keep in chatroom feat
 file not uploading --> multiple file selection, upload remaining --> upload success, fetch remaining --> fetch success, download error on device --> download success, opening error --> files and folder can be uploaded at once --> 
 can download zip, or individual files but cant open it --> fixed timezone to india in sql && whole zip 200 && partial zip 500  --> fixed timezone for all tables queries && zip download 200 && partial download 200 --> UI updated by tkshinde --> 
-delete func && cleanup action setup remaining && logs of user in manage page  && end to end encrption of file using crypt4gh package remaining 
-chat not chatting
-
-end to end encrption of file using crypt4gh package remaining 
-
-  node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-  node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
-  openssl genrsa -out private.pem 2048
-  openssl rsa -in private.pem -pubout -out public.pem
+delete func && cleanup action setup remaining && logs of user in manage page  && end to end encrption of file using crypt4gh package remaining --> file encrytion 200 --> selective file download --> file update --> file delete --> UI tweaks for /manage/id
+chat not chatting --> supabase setup --> hydration is such a pain ----- add room info --> add participants --> manage chats.
