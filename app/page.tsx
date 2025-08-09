@@ -22,6 +22,12 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Script from "next/script";
 import Image from "next/image";
+import dynamic from 'next/dynamic';
+import { HydrationSafe } from "@/components/hydration-safe";
+const PeerlistBadge = dynamic(() => import('@/components/Launch').then(mod => ({ default: mod.PeerlistBadge })), { ssr: false });
+const ProductHunt = dynamic(() => import('@/components/Launch').then(mod => ({ default: mod.ProductHunt })), { ssr: false });
+
+
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -413,7 +419,7 @@ export default function Home() {
 							</p>
 						</div>
 
-						<div className="fade-in flex flex-col sm:flex-row gap-4 justify-center mb-8">
+						<div className="fade-in flex flex-col sm:flex-row gap-4 justify-center mb-20">
 							<Link href="/files">
 								<Button
 									size={"lg"}
@@ -434,23 +440,13 @@ export default function Home() {
 							</Link>
 						</div>
 
-						<div className="flex justify-center mb-10" id="peerlistBtn">
-							<Link
-								href="https://peerlist.io/singhaman21/project/silentparcel--secure-file-sharing--chatting"
-								target="_blank"
-								rel="noreferrer"
-								className="flex justify-center transition-filter duration-300 [filter:drop-shadow(0_0_8px_rgba(255,215,0,0.3))]"
-							>
-								<Image
-									src="https://peerlist.io/api/v1/projects/embed/PRJHOK8DE6B88R7JDIPJP7D89LQDGL?showUpvote=false&theme=light"
-									alt="SilentParcel - Secure File Sharing & Chatting"
-									height={200}
-									width={200}
-									className="w-auto"
-									style={{ width: "auto", height: "60px" }}
-								/>
-							</Link>
-						</div>
+                        {/* Stable server placeholder; dynamic badge mounts on client */}
+                        <HydrationSafe
+                            fallback={<div className="flex justify-center mb-10" id="peerlistBtn" aria-hidden />}
+                            suppressHydrationWarning
+                        >
+                            <PeerlistBadge />
+                        </HydrationSafe>
 
 						<div className="fade-in grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-8 max-w-xs sm:max-w-lg mx-auto">
 							<div className="text-center">
