@@ -396,7 +396,7 @@ export default function Home() {
 						<div className="flex justify-center mb-10">
 						<Link href="https://peerlist.io/singhaman21/project/silentparcel--secure-file-sharing--chatting" target="_blank" rel="noreferrer" className="flex justify-center">
 							<img
-								src="https://peerlist.io/api/v1/projects/embed/PRJHOK8DE6B88R7JDIPJP7D89LQDGL?showUpvote=false&theme=light"
+								src="https://peerlist.io/api/v1/projects/embed/PRJHOK8DE6B88R7JDIPJP7D89LQDGL?showUpvote=true&theme=light"
 								alt="SilentParcel - Secure File Sharing & Chatting"
 								style={{ width: "auto", height: "72px" }}
 							/>
