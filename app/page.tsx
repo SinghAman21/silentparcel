@@ -24,8 +24,7 @@ import Script from "next/script";
 import Image from "next/image";
 import dynamic from 'next/dynamic';
 import { HydrationSafe } from "@/components/hydration-safe";
-const PeerlistBadge = dynamic(() => import('@/components/Launch').then(mod => ({ default: mod.PeerlistBadge })), { ssr: false });
-const ProductHunt = dynamic(() => import('@/components/Launch').then(mod => ({ default: mod.ProductHunt })), { ssr: false });
+import { PeerlistBadge, ProductHunt } from '@/components/Launch';
 
 
 
@@ -429,13 +428,22 @@ export default function Home() {
 									Upload file
 								</Button>
 							</Link>
-							<Link href="/">
+							<Link href="/rooms/">
 								<Button
 									size={"lg"}
 									className=" bg-muted hover:bg-muted/80 text-foreground rounded-lg font-medium border border-border transition-all duration-200 hover:scale-[1.02]"
 								>
 									<MessageSquare className="mr-2 h-4 w-4 " />
 									{/*Create room*/} Coming Soon
+								</Button>
+							</Link>
+							<Link href="/rooms/create">
+								<Button
+									size={"lg"}
+									className=" bg-muted hover:bg-muted/80 text-foreground rounded-lg font-medium border border-border transition-all duration-200 hover:scale-[1.02]"
+								>
+									<MessageSquare className="mr-2 h-4 w-4 " />
+									{/*Create room*/} create Soon
 								</Button>
 							</Link>
 						</div>
@@ -445,7 +453,10 @@ export default function Home() {
                             fallback={<div className="flex justify-center mb-10" id="peerlistBtn" aria-hidden />}
                             suppressHydrationWarning
                         >
+							<div className="flex justify-center mb-10 gap-2" id="peerlistBtn" aria-hidden>
                             <PeerlistBadge />
+							<ProductHunt />
+							</div>
                         </HydrationSafe>
 
 						<div className="fade-in grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-8 max-w-xs sm:max-w-lg mx-auto">
