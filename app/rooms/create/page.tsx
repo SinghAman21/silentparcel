@@ -13,7 +13,7 @@ import Link from 'next/link';
 import ThemeToggle from '@/components/theme-toggle';
 import { useToast } from '@/hooks/use-toast';
 
-type CreationStage = 'setup' | 'captcha' | 'complete';
+type CreationStage = 'setup' | 'complete';
 
 export default function CreateRoomPage() {
   const router = useRouter();
@@ -28,7 +28,7 @@ export default function CreateRoomPage() {
   const [copiedLink, setCopiedLink] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
 
-  const handleCaptchaComplete = async (captchaToken: string) => {
+  const handleCreateRoom = async () => {
     setIsCreating(true);
     
     try {
@@ -39,7 +39,6 @@ export default function CreateRoomPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          captchaToken,
           roomName: roomName || undefined,
           expiryTime: expiryTime
         }),
@@ -179,7 +178,7 @@ export default function CreateRoomPage() {
                 </div>
 
                 <Button 
-                  onClick={() => setStage('captcha')}
+                  onClick={() => setStage('complete')}
                   className="w-full hover:scale-105 transition-transform"
                   disabled={isCreating}
                 >
@@ -270,13 +269,13 @@ export default function CreateRoomPage() {
           </div>
         )}
 
-        <CaptchaModal 
+        {/* <CaptchaModal 
           isOpen={stage === 'captcha'}
           fileName="Chat Room"
           fileSize={0}
           onComplete={() => handleCaptchaComplete('')}
           onClose={() => setStage('setup')}
-        />
+        /> */}
       </div>
     </div>
   );

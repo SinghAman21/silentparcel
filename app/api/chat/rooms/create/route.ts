@@ -14,40 +14,40 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { captchaToken, roomName, expiryTime } = await request.json();
+    const { roomName, expiryTime } = await request.json();
 
     // Validate required fields
-    if (!captchaToken) {
-      return NextResponse.json(
-        { error: 'CAPTCHA verification required' },
-        { status: 400 }
-      );
-    }
+    // if (!captchaToken) {
+    //   return NextResponse.json(
+    //     { error: 'CAPTCHA verification required' },
+    //     { status: 400 }
+    //   );
+    // }
 
     // Verify CAPTCHA (only if HCAPTCHA_SECRET_KEY is set)
-    if (process.env.HCAPTCHA_SECRET_KEY) {
-      try {
-        const captchaResponse = await fetch('https://hcaptcha.com/siteverify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: `secret=${process.env.HCAPTCHA_SECRET_KEY}&response=${captchaToken}`
-        });
+    // if (process.env.HCAPTCHA_SECRET_KEY) {
+    //   try {
+    //     const captchaResponse = await fetch('https://hcaptcha.com/siteverify', {
+    //       method: 'POST',
+    //       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    //       body: `secret=${process.env.HCAPTCHA_SECRET_KEY}&response=${captchaToken}`
+    //     });
 
-        const captchaData = await captchaResponse.json();
-        if (!captchaData.success) {
-          return NextResponse.json(
-            { error: 'CAPTCHA verification failed' },
-            { status: 400 }
-          );
-        }
-      } catch (captchaError) {
-        console.error('CAPTCHA verification error:', captchaError);
-        // Continue without CAPTCHA if there's an error
-        console.warn('Proceeding without CAPTCHA verification due to error');
-      }
-    } else {
-      console.warn('HCAPTCHA_SECRET_KEY not set, skipping CAPTCHA verification');
-    }
+    //     const captchaData = await captchaResponse.json();
+    //     if (!captchaData.success) {
+    //       return NextResponse.json(
+    //         { error: 'CAPTCHA verification failed' },
+    //         { status: 400 }
+    //       );
+    //     }
+    //   } catch (captchaError) {
+    //     console.error('CAPTCHA verification error:', captchaError);
+    //     // Continue without CAPTCHA if there's an error
+    //     console.warn('Proceeding without CAPTCHA verification due to error');
+    //   }
+    // } else {
+    //   console.warn('HCAPTCHA_SECRET_KEY not set, skipping CAPTCHA verification');
+    // }
 
     // Generate room data
     const roomId = generateId().substring(0, 8); // Ensure 8 characters

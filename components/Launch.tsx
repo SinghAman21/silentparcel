@@ -13,7 +13,7 @@ export function PeerlistBadge() {
         className="flex justify-center transition-filter duration-300 [filter:drop-shadow(0_0_8px_rgba(255,215,0,0.3))]"
       >
         <Image
-          src="https://peerlist.io/api/v1/projects/embed/PRJHOK8DE6B88R7JDIPJP7D89LQDGL?showUpvote=false&theme=light"
+          src="https://peerlist.io/api/v1/projects/embed/PRJHOK8DE6B88R7JDIPJP7D89LQDGL?showUpvote=true&theme=light"
           alt="SilentParcel - Secure File Sharing & Chatting"
           width={200}
           height={60}
