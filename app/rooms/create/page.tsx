@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ArrowLeft, MessageSquare, Shield, Clock, Copy, Check } from 'lucide-react';
+import { ArrowLeft, MessageSquare, Shield, Clock, Copy, Check, Code, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -21,6 +21,8 @@ export default function CreateRoomPage() {
   const [stage, setStage] = useState<CreationStage>('setup');
   const [roomName, setRoomName] = useState('');
   const [expiryTime, setExpiryTime] = useState('1h');
+  const [roomType, setRoomType] = useState('chat');
+  const [defaultLanguage, setDefaultLanguage] = useState('javascript');
   const [generatedPassword, setGeneratedPassword] = useState('');
   const [roomLink, setRoomLink] = useState('');
   const [roomId, setRoomId] = useState('');
@@ -40,7 +42,9 @@ export default function CreateRoomPage() {
         },
         body: JSON.stringify({
           roomName: roomName || undefined,
-          expiryTime: expiryTime
+          expiryTime: expiryTime,
+          roomType: roomType,
+          defaultLanguage: roomType !== 'chat' ? defaultLanguage : undefined
         }),
       });
 
@@ -103,6 +107,32 @@ export default function CreateRoomPage() {
     router.push(`/rooms/${roomId}`);
   };
 
+  const getRoomTypeDescription = () => {
+    switch (roomType) {
+      case 'chat':
+        return 'Traditional chat room with text messages';
+      case 'code':
+        return 'Collaborative code editor with real-time cursor tracking';
+      case 'mixed':
+        return 'Combined chat and code editor in one room';
+      default:
+        return '';
+    }
+  };
+
+  const getRoomTypeIcon = () => {
+    switch (roomType) {
+      case 'chat':
+        return <MessageSquare className="h-5 w-5" />;
+      case 'code':
+        return <Code className="h-5 w-5" />;
+      case 'mixed':
+        return <Users className="h-5 w-5" />;
+      default:
+        return <MessageSquare className="h-5 w-5" />;
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -123,14 +153,14 @@ export default function CreateRoomPage() {
           <div className="space-y-6">
             <div className="text-center">
               <h1 className="text-3xl font-bold mb-2">Create Secret Room</h1>
-              <p className="text-muted-foreground">Configure your anonymous chat room</p>
+              <p className="text-muted-foreground">Configure your anonymous collaborative room</p>
             </div>
 
             <Card className="bg-card/50 border-border/50">
               <CardHeader>
                 <CardTitle className="flex items-center">
-                  <MessageSquare className="h-5 w-5 mr-2" />
-                  Room Settings
+                  {getRoomTypeIcon()}
+                  <span className="ml-2">Room Settings</span>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -138,7 +168,7 @@ export default function CreateRoomPage() {
                   <Label htmlFor="room-name">Room Name (Optional)</Label>
                   <Input
                     id="room-name"
-                    placeholder="My Secret Chat"
+                    placeholder={roomType === 'code' ? 'My Code Session' : 'My Secret Chat'}
                     value={roomName}
                     onChange={(e) => setRoomName(e.target.value)}
                     className="bg-background/50"
@@ -147,6 +177,64 @@ export default function CreateRoomPage() {
                     Leave empty for auto-generated name
                   </p>
                 </div>
+
+                <div className="space-y-2">
+                  <Label>Room Type</Label>
+                  <Select value={roomType} onValueChange={setRoomType}>
+                    <SelectTrigger className="bg-background/50">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-background/95 backdrop-blur-xs border-border/50">
+                      <SelectItem value="chat">
+                        <div className="flex items-center space-x-2">
+                          <MessageSquare className="h-4 w-4" />
+                          <span>Chat Room</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="code">
+                        <div className="flex items-center space-x-2">
+                          <Code className="h-4 w-4" />
+                          <span>Code Editor</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="mixed">
+                        <div className="flex items-center space-x-2">
+                          <Users className="h-4 w-4" />
+                          <span>Mixed (Chat + Code)</span>
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {getRoomTypeDescription()}
+                  </p>
+                </div>
+
+                {roomType !== 'chat' && (
+                  <div className="space-y-2">
+                    <Label>Default Language</Label>
+                    <Select value={defaultLanguage} onValueChange={setDefaultLanguage}>
+                      <SelectTrigger className="bg-background/50">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-background/95 backdrop-blur-xs border-border/50">
+                        <SelectItem value="javascript">JavaScript</SelectItem>
+                        <SelectItem value="typescript">TypeScript</SelectItem>
+                        <SelectItem value="python">Python</SelectItem>
+                        <SelectItem value="java">Java</SelectItem>
+                        <SelectItem value="cpp">C++</SelectItem>
+                        <SelectItem value="c">C</SelectItem>
+                        <SelectItem value="html">HTML</SelectItem>
+                        <SelectItem value="css">CSS</SelectItem>
+                        <SelectItem value="json">JSON</SelectItem>
+                        <SelectItem value="markdown">Markdown</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Initial language for the code editor
+                    </p>
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label>Self-Destruct Timer</Label>
@@ -173,16 +261,17 @@ export default function CreateRoomPage() {
                     <p className="font-medium text-sm">Privacy Features</p>
                     <p className="text-xs text-muted-foreground">
                       Auto-generated password • Anonymous usernames • No message history
+                      {roomType !== 'chat' && ' • Real-time cursor tracking'}
                     </p>
                   </div>
                 </div>
 
                 <Button 
-                  onClick={() => setStage('complete')}
+                  onClick={handleCreateRoom}
                   className="w-full hover:scale-105 transition-transform"
                   disabled={isCreating}
                 >
-                  {isCreating ? 'Creating...' : 'Create Room'}
+                  {isCreating ? 'Creating...' : `Create ${roomType === 'code' ? 'Code' : roomType === 'mixed' ? 'Mixed' : 'Chat'} Room`}
                 </Button>
               </CardContent>
             </Card>
@@ -194,7 +283,7 @@ export default function CreateRoomPage() {
             <div className="text-center">
               <h1 className="text-2xl font-bold mb-2">Room Created! 🎉</h1>
               <p className="text-muted-foreground">
-                Your anonymous chat room is ready. Share the password with others to invite them.
+                Your {roomType === 'code' ? 'collaborative code room' : roomType === 'mixed' ? 'mixed chat and code room' : 'anonymous chat room'} is ready. Share the password with others to invite them.
               </p>
             </div>
 
@@ -248,6 +337,13 @@ export default function CreateRoomPage() {
                   <Clock className="h-4 w-4" />
                   <span>Room expires in {expiryTime === '30m' ? '30 minutes' : expiryTime === '1h' ? '1 hour' : expiryTime === '2h' ? '2 hours' : expiryTime === '6h' ? '6 hours' : '24 hours'}</span>
                 </div>
+
+                {roomType !== 'chat' && (
+                  <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                    <Code className="h-4 w-4" />
+                    <span>Default language: {defaultLanguage}</span>
+                  </div>
+                )}
               </CardContent>
             </Card>
 

@@ -10,8 +10,23 @@ import { Label } from "@/components/ui/label";
 import ThemeToggle from "@/components/theme-toggle";
 import Link from "next/link";
 import { SupabaseChatInterface } from "@/components/supabase-chat-interface";
+import { CollaborativeCodeInterface } from "@/components/collaborative-code-interface";
 import { useToast } from "@/hooks/use-toast";
 import { useCallback } from "react";
+
+interface RoomInfo {
+  id: string;
+  name: string;
+  expiryTime: number;
+  expiresAt: string;
+  createdAt: string;
+  participantCount: number;
+  messageCount: number;
+  roomType: 'chat' | 'code' | 'mixed';
+  defaultLanguage: string;
+  collaborativeMode: boolean;
+  codeDocumentCount: number;
+}
 
 export default function ChatRoomPage() {
 	const params = useParams();
@@ -24,8 +39,8 @@ export default function ChatRoomPage() {
 	const [roomExists, setRoomExists] = useState(true);
 	const [isLoading, setIsLoading] = useState(false);
 	const [isCheckingRoom, setIsCheckingRoom] = useState(true);
-	const [userData, setUserData] = useState(null);
-	const [roomInfo, setRoomInfo] = useState(null);
+	const [userData, setUserData] = useState<any>(null);
+	const [roomInfo, setRoomInfo] = useState<RoomInfo | null>(null);
 
 	const roomId = params.id as string;
 
@@ -162,7 +177,7 @@ export default function ChatRoomPage() {
 						</CardHeader>
 						<CardContent className="space-y-4">
 							<p className="text-muted-foreground">
-								This chat room doesn't exist or has expired. Rooms are
+								This room doesn't exist or has expired. Rooms are
 								automatically deleted after their expiration time.
 							</p>
 							<Button className="w-full" onClick={() => router.push("/rooms")}>
@@ -195,7 +210,7 @@ export default function ChatRoomPage() {
 						<CardHeader>
 							<CardTitle className="flex items-center">
 								<Shield className="h-5 w-5 mr-2" />
-								Join Chat Room
+								Join {roomInfo?.roomType === 'code' ? 'Code' : roomInfo?.roomType === 'mixed' ? 'Mixed' : 'Chat'} Room
 							</CardTitle>
 						</CardHeader>
 						<CardContent className="space-y-4">
@@ -233,7 +248,7 @@ export default function ChatRoomPage() {
 										Joining...
 									</>
 								) : (
-									"Join Room"
+									`Join ${roomInfo?.roomType === 'code' ? 'Code' : roomInfo?.roomType === 'mixed' ? 'Mixed' : 'Chat'} Room`
 								)}
 							</Button>
 						</CardContent>
@@ -243,30 +258,40 @@ export default function ChatRoomPage() {
 		);
 	}
 
+	// Render appropriate interface based on room type
+	const renderInterface = () => {
+		if (roomInfo?.roomType === 'code' || roomInfo?.roomType === 'mixed') {
+			return (
+				<CollaborativeCodeInterface
+					roomId={roomId}
+					roomPassword={password}
+					userData={userData}
+					onLeave={() => {
+						setIsAuthenticated(false);
+						setUserData(null);
+						setPassword("");
+					}}
+				/>
+			);
+		} else {
+			return (
+				<SupabaseChatInterface
+					roomId={roomId}
+					roomPassword={password}
+					userData={userData}
+					onLeave={() => {
+						setIsAuthenticated(false);
+						setUserData(null);
+						setPassword("");
+					}}
+				/>
+			);
+		}
+	};
+
 	return (
 		<div className="min-h-screen bg-background">
-			<header className="border-b border-border/40 backdrop-blur-xs bg-background/80 sticky top-0 z-50">
-				<div className="container mx-auto px-4 py-4 flex items-center justify-between">
-					<Link href="/rooms">
-						<Button variant="ghost" size="sm" className="hover:bg-accent/50">
-							<ArrowLeft className="h-4 w-4 mr-2" />
-							Back to Rooms
-						</Button>
-					</Link>
-					<ThemeToggle />
-				</div>
-			</header>
-
-			<SupabaseChatInterface
-				roomId={roomId}
-				roomPassword={password}
-				userData={userData}
-				onLeave={() => {
-					setIsAuthenticated(false);
-					setUserData(null);
-					setPassword("");
-				}}
-			/>
+			{renderInterface()}
 		</div>
 	);
 }

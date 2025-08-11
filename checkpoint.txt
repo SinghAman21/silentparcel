@@ -21,6 +21,9 @@ Suggestions of techstack:
 Integrate Monaco Editor or similar in the main coding panel.
 https://microsoft.github.io/monaco-editor/docs.html     
 https://github.com/microsoft/monaco-editor
+            |
+            |
+            V https://github.com/yjs/y-monaco  live coding
 Implement real-time syncing of code state through WebSocket.
 Add a "Copy All Code" button.
 

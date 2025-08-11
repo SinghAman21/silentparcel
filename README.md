@@ -22,6 +22,16 @@ A secure, end-to-end encrypted data sharing platform built with Next.js, featuri
 - **Download Limits**: Configurable download count restrictions
 - **Modern UI**: Beautiful, responsive interface with dark/light themes
 
+### Collaborative Features
+- **Real-time Chat Rooms**: Anonymous ephemeral chat rooms with auto-deletion
+- **Collaborative Coding**: Live collaborative code editing with custom cursors
+- **Multi-language Support**: JavaScript, TypeScript, Python, Java, C/C++, HTML/CSS, JSON, Markdown
+- **Y.js Integration**: Built on Y.js for reliable real-time collaboration
+- **WebRTC Communication**: Peer-to-peer communication for low latency
+- **Code Synchronization**: Automatic conflict resolution and synchronization
+- **File Download**: Download code files with proper extensions
+- **Tabbed Interface**: Switch between code editor and chat seamlessly
+
 ### Security Features
 - **Zero-Knowledge Architecture**: Server cannot decrypt your files
 - **Audit Logging**: Comprehensive activity tracking
@@ -38,7 +48,9 @@ A secure, end-to-end encrypted data sharing platform built with Next.js, featuri
 - **File Storage**: Appwrite Cloud Storage
 - **Encryption**: AES-256 with crypto-js
 - **Virus Scanning**: ClamAV integration with appwrite ( inbuilt )
-- **Real-time**: Socket.IO for chat features
+- **Real-time**: Supabase real-time subscriptions for chat
+- **Collaborative Coding**: Y.js, y-monaco, y-webrtc, Monaco Editor
+- **WebRTC**: Peer-to-peer communication for low-latency collaboration
 
 ### Key Components
 

@@ -26,6 +26,11 @@ export class RateLimiter {
     const ip = getClientIP(req);
     const key = REDIS_KEYS.RATE_LIMIT(ip);
     
+    // If Redis is not available, allow all requests
+    if (!redis) {
+      return { allowed: true };
+    }
+    
     try {
       const current = await redis.get(key);
       const requestCount = current ? parseInt(current) : 0;

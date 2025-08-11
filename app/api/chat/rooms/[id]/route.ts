@@ -59,6 +59,20 @@ export async function GET(
       console.error('Error getting message count:', messageCountError);
     }
 
+    // Get code documents count for collaborative rooms
+    let codeDocumentCount = 0;
+    if (room.room_type !== 'chat') {
+      const { count: docCount, error: docCountError } = await supabaseAdmin
+        .from('collaborative_code_documents')
+        .select('*', { count: 'exact', head: true })
+        .eq('room_id', roomId)
+        .eq('is_active', true);
+
+      if (!docCountError) {
+        codeDocumentCount = docCount || 0;
+      }
+    }
+
     return NextResponse.json({
       success: true,
       room: {
@@ -68,7 +82,11 @@ export async function GET(
         expiresAt: room.expires_at,
         createdAt: room.created_at,
         participantCount: participantCount || 0,
-        messageCount: messageCount || 0
+        messageCount: messageCount || 0,
+        roomType: room.room_type || 'chat',
+        defaultLanguage: room.default_language || 'javascript',
+        collaborativeMode: room.collaborative_mode || false,
+        codeDocumentCount
       }
     });
 
