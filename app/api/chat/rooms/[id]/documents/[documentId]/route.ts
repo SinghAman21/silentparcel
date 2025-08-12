@@ -25,12 +25,14 @@ export async function GET(
       .single();
 
     if (error || !document) {
+      console.log('chat - get document failed (document not found)');
       return NextResponse.json(
         { error: 'Document not found' },
         { status: 404 }
       );
     }
 
+    console.log('chat - get document complete');
     return NextResponse.json({
       success: true,
       document
@@ -38,6 +40,7 @@ export async function GET(
 
   } catch (error) {
     console.error('Error getting document:', error);
+    console.log('chat - get document failed');
     return NextResponse.json(
       { error: 'Failed to get document' },
       { status: 500 }
@@ -67,6 +70,7 @@ export async function PUT(
     if (documentName !== undefined) updateData.document_name = documentName;
 
     if (Object.keys(updateData).length === 0) {
+      console.log('chat - update document failed (no fields to update)');
       return NextResponse.json(
         { error: 'No fields to update' },
         { status: 400 }
@@ -84,12 +88,14 @@ export async function PUT(
 
     if (error || !document) {
       console.error('Error updating document:', error);
+      console.log('chat - update document failed (database error)');
       return NextResponse.json(
         { error: 'Failed to update document' },
         { status: 500 }
       );
     }
 
+    console.log('chat - update document complete');
     return NextResponse.json({
       success: true,
       document
@@ -97,6 +103,7 @@ export async function PUT(
 
   } catch (error) {
     console.error('Error updating document:', error);
+    console.log('chat - update document failed');
     return NextResponse.json(
       { error: 'Failed to update document' },
       { status: 500 }
@@ -127,12 +134,14 @@ export async function DELETE(
 
     if (error) {
       console.error('Error deleting document:', error);
+      console.log('chat - delete document failed (database error)');
       return NextResponse.json(
         { error: 'Failed to delete document' },
         { status: 500 }
       );
     }
 
+    console.log('chat - delete document complete');
     return NextResponse.json({
       success: true,
       message: 'Document deleted successfully'
@@ -140,6 +149,7 @@ export async function DELETE(
 
   } catch (error) {
     console.error('Error deleting document:', error);
+    console.log('chat - delete document failed');
     return NextResponse.json(
       { error: 'Failed to delete document' },
       { status: 500 }

@@ -24,6 +24,7 @@ export async function GET(
       .single();
 
     if (roomError || !room) {
+      console.log('chat - get room info failed (room not found)');
       return NextResponse.json(
         { error: 'Room not found' },
         { status: 404 }
@@ -32,6 +33,7 @@ export async function GET(
 
     // Check if room has expired
     if (new Date(room.expires_at) < new Date()) {
+      console.log('chat - get room info failed (room expired)');
       return NextResponse.json(
         { error: 'Room has expired' },
         { status: 410 }
@@ -73,6 +75,7 @@ export async function GET(
       }
     }
 
+    console.log('chat - get room info complete');
     return NextResponse.json({
       success: true,
       room: {
@@ -84,17 +87,17 @@ export async function GET(
         participantCount: participantCount || 0,
         messageCount: messageCount || 0,
         roomType: room.room_type || 'chat',
-        defaultLanguage: room.default_language || 'javascript',
-        collaborativeMode: room.collaborative_mode || false,
+        // Removed: defaultLanguage, collaborativeMode
         codeDocumentCount
       }
     });
 
   } catch (error) {
     console.error('Error getting room info:', error);
+    console.log('chat - get room info failed');
     return NextResponse.json(
       { error: 'Failed to get room information' },
       { status: 500 }
     );
   }
-} 
+}

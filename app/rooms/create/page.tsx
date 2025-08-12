@@ -22,13 +22,61 @@ export default function CreateRoomPage() {
   const [roomName, setRoomName] = useState('');
   const [expiryTime, setExpiryTime] = useState('1h');
   const [roomType, setRoomType] = useState('chat');
-  const [defaultLanguage, setDefaultLanguage] = useState('javascript');
+  // const [defaultLanguage, setDefaultLanguage] = useState('javascript');
   const [generatedPassword, setGeneratedPassword] = useState('');
   const [roomLink, setRoomLink] = useState('');
   const [roomId, setRoomId] = useState('');
   const [copiedPassword, setCopiedPassword] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+
+  // const handleCreateRoom = async () => {
+  //   setIsCreating(true);
+    
+  //   try {
+  //     // Create room via API
+  //     const response = await fetch('/api/chat/rooms/create', {
+  //       method: 'POST',
+  //       headers: {
+  //         'Content-Type': 'application/json',
+  //       },
+  //       body: JSON.stringify({
+  //         roomName: roomName || undefined,
+  //         expiryTime: expiryTime,
+  //         roomType: roomType,
+  //         defaultLanguage: roomType !== 'chat' ? defaultLanguage : undefined
+  //       }),
+  //     });
+
+  //     const data = await response.json();
+      
+  //     if (!data.success) {
+  //       throw new Error(data.error || 'Failed to create room');
+  //     }
+
+  //     const link = `${window.location.origin}/rooms/${data.room.id}`;
+      
+  //     setGeneratedPassword(data.room.password);
+  //     setRoomLink(link);
+  //     setRoomId(data.room.id);
+  //     setStage('complete');
+      
+  //     toast({
+  //       title: "Success",
+  //       description: "Room created successfully!",
+  //     });
+  //   } catch (error) {
+  //     console.error('Error creating room:', error);
+  //     toast({
+  //       title: "Error",
+  //       description: error instanceof Error ? error.message : 'Failed to create room',
+  //       variant: "destructive"
+  //     });
+  //     setStage('setup');
+  //   } finally {
+  //     setIsCreating(false);
+  //   }
+  // };
 
   const handleCreateRoom = async () => {
     setIsCreating(true);
@@ -43,8 +91,8 @@ export default function CreateRoomPage() {
         body: JSON.stringify({
           roomName: roomName || undefined,
           expiryTime: expiryTime,
-          roomType: roomType,
-          defaultLanguage: roomType !== 'chat' ? defaultLanguage : undefined
+          roomType: roomType
+          // Removed: defaultLanguage
         }),
       });
 
@@ -77,7 +125,6 @@ export default function CreateRoomPage() {
       setIsCreating(false);
     }
   };
-
   const copyToClipboard = async (text: string, type: 'password' | 'link') => {
     try {
       await navigator.clipboard.writeText(text);
@@ -210,7 +257,7 @@ export default function CreateRoomPage() {
                   </p>
                 </div>
 
-                {roomType !== 'chat' && (
+                {/* {roomType !== 'chat' && (
                   <div className="space-y-2">
                     <Label>Default Language</Label>
                     <Select value={defaultLanguage} onValueChange={setDefaultLanguage}>
@@ -234,7 +281,7 @@ export default function CreateRoomPage() {
                       Initial language for the code editor
                     </p>
                   </div>
-                )}
+                )} */}
 
                 <div className="space-y-2">
                   <Label>Self-Destruct Timer</Label>
@@ -338,12 +385,12 @@ export default function CreateRoomPage() {
                   <span>Room expires in {expiryTime === '30m' ? '30 minutes' : expiryTime === '1h' ? '1 hour' : expiryTime === '2h' ? '2 hours' : expiryTime === '6h' ? '6 hours' : '24 hours'}</span>
                 </div>
 
-                {roomType !== 'chat' && (
+                {/* {roomType !== 'chat' && (
                   <div className="flex items-center space-x-2 text-sm text-muted-foreground">
                     <Code className="h-4 w-4" />
                     <span>Default language: {defaultLanguage}</span>
                   </div>
-                )}
+                )} */}
               </CardContent>
             </Card>
 
@@ -364,14 +411,6 @@ export default function CreateRoomPage() {
             </div>
           </div>
         )}
-
-        {/* <CaptchaModal 
-          isOpen={stage === 'captcha'}
-          fileName="Chat Room"
-          fileSize={0}
-          onComplete={() => handleCaptchaComplete('')}
-          onClose={() => setStage('setup')}
-        /> */}
       </div>
     </div>
   );

@@ -24,6 +24,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (roomError || !room) {
+      console.log('chat - verify room failed (invalid credentials)');
       return NextResponse.json(
         { error: 'Invalid room ID or password' },
         { status: 404 }
@@ -32,6 +33,7 @@ export async function POST(request: NextRequest) {
 
     // Check if room has expired
     if (new Date(room.expires_at) < new Date()) {
+      console.log('chat - verify room failed (room expired)');
       return NextResponse.json(
         { error: 'Room has expired' },
         { status: 410 }
@@ -64,6 +66,7 @@ export async function POST(request: NextRequest) {
         console.error('Error updating participant:', updateError);
       }
 
+      console.log('chat - verify room (existing user) complete');
       return NextResponse.json({
         success: true,
         room: {
@@ -92,6 +95,7 @@ export async function POST(request: NextRequest) {
 
     if (participantError) {
       console.error('Error creating participant:', participantError);
+      console.log('chat - verify room failed (participant creation error)');
       return NextResponse.json(
         { error: 'Failed to join room. Please try again.' },
         { status: 500 }
@@ -116,6 +120,7 @@ export async function POST(request: NextRequest) {
       // Don't fail the request if audit logging fails
     }
 
+    console.log('chat - verify room (new user) complete');
     return NextResponse.json({
       success: true,
       room: {
@@ -149,6 +154,7 @@ export async function POST(request: NextRequest) {
       }
     }
     
+    console.log('chat - verify room failed');
     return NextResponse.json(
       { error: 'Failed to join room. Please try again.' },
       { status: 500 }

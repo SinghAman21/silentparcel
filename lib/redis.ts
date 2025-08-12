@@ -51,6 +51,7 @@ export const setWithExpiry = async (key: string, value: string, ttl: number) => 
   if (redis) {
     try {
       await redis.setex(key, ttl, value);
+      console.log('redis - setWithExpiry complete');
     } catch (error) {
       console.warn('Redis setWithExpiry failed:', error);
     }
@@ -64,6 +65,7 @@ export const getAndDelete = async (key: string) => {
       if (value) {
         await redis.del(key);
       }
+      console.log('redis - getAndDelete complete');
       return value;
     } catch (error) {
       console.warn('Redis getAndDelete failed:', error);

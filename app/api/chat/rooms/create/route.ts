@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { roomName, expiryTime, roomType = 'chat', defaultLanguage = 'javascript' } = await request.json();
+    const { roomName, expiryTime, roomType = 'chat' } = await request.json();
 
     // Validate room type
     const validRoomTypes = ['chat', 'code', 'mixed'];
@@ -25,40 +25,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate default language for code rooms
-    const validLanguages = ['javascript', 'typescript', 'python', 'java', 'cpp', 'c', 'html', 'css', 'json', 'markdown'];
-    if (roomType !== 'chat' && !validLanguages.includes(defaultLanguage)) {
-      return NextResponse.json(
-        { error: 'Invalid default language for code room' },
-        { status: 400 }
-      );
-    }
-
     // Generate room data
     const roomId = generateId().substring(0, 8); // Ensure 8 characters
     const roomPassword = generateRoomPassword();
     const creatorId = generateId();
     const creatorUsername = `User_${Math.random().toString(36).substr(2, 6)}`;
 
-    // Create room in Supabase
+    // Create room in Supabase - REMOVED problematic fields
     const { data: room, error: roomError } = await supabaseAdmin
       .from('chat_rooms')
       .insert({
         room_id: roomId,
-        name: roomName || (roomType === 'code' ? 'Collaborative Code Room' : 'Anonymous Room'),
+        name: roomName || getDefaultRoomName(roomType),
         password: roomPassword,
         expiry_time: expiryTime || '1h',
         created_by: creatorId,
         is_active: true,
-        room_type: roomType,
-        default_language: defaultLanguage,
-        collaborative_mode: roomType !== 'chat'
+        room_type: roomType
+        // Removed: default_language, collaborative_mode
       })
       .select()
       .single();
 
     if (roomError) {
       console.error('Error creating room:', roomError);
+      console.log('chat - create room failed (database error)');
       return NextResponse.json(
         { error: 'Failed to create room. Please try again.' },
         { status: 500 }
@@ -81,8 +72,9 @@ export async function POST(request: NextRequest) {
       // Don't fail the request, just log the error
     }
 
-    // Create initial code document for code rooms
+    // Create initial code document for code rooms (with default language)
     if (roomType !== 'chat') {
+      const defaultLanguage = 'javascript'; // Default language for all code rooms
       const { error: documentError } = await supabaseAdmin
         .from('collaborative_code_documents')
         .insert({
@@ -99,7 +91,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Log audit event
+    // Log audit event (optional - don't fail if this fails)
     try {
       await supabaseAdmin.from('audit_logs').insert({
         action: 'room_create',
@@ -108,11 +100,10 @@ export async function POST(request: NextRequest) {
         user_id: creatorId,
         ip_address: getClientIP(request),
         metadata: {
-          roomName: roomName || (roomType === 'code' ? 'Collaborative Code Room' : 'Anonymous Room'),
+          roomName: roomName || getDefaultRoomName(roomType),
           username: creatorUsername,
           expiryTime: expiryTime || '1h',
-          roomType,
-          defaultLanguage
+          roomType
         }
       });
     } catch (auditError) {
@@ -123,18 +114,18 @@ export async function POST(request: NextRequest) {
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || request.nextUrl.origin;
     const roomUrl = `${baseUrl}/rooms/${roomId}`;
 
+    console.log('chat - create room complete');
     return NextResponse.json({
       success: true,
       room: {
         id: roomId,
-        name: roomName || (roomType === 'code' ? 'Collaborative Code Room' : 'Anonymous Room'),
+        name: roomName || getDefaultRoomName(roomType),
         password: roomPassword,
         url: roomUrl,
         expiryTime: expiryTime || '1h',
         expiresAt: room.expires_at,
-        roomType,
-        defaultLanguage,
-        collaborativeMode: roomType !== 'chat'
+        roomType
+        // Removed: defaultLanguage, collaborativeMode
       },
       user: {
         id: creatorId,
@@ -162,6 +153,7 @@ export async function POST(request: NextRequest) {
       }
     }
     
+    console.log('chat - create room failed');
     return NextResponse.json(
       { error: 'Failed to create room. Please try again.' },
       { status: 500 }
@@ -169,9 +161,21 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// Helper functions
 function getRandomColor(): string {
   const colors = ['#e57373', '#64b5f6', '#81c784', '#ffd54f', '#ba68c8', '#4db6ac', '#ff8a65', '#7986cb'];
   return colors[Math.floor(Math.random() * colors.length)];
+}
+
+function getDefaultRoomName(roomType: string): string {
+  switch (roomType) {
+    case 'code':
+      return 'Collaborative Code Room';
+    case 'mixed':
+      return 'Mixed Chat & Code Room';
+    default:
+      return 'Anonymous Chat Room';
+  }
 }
 
 function getFileExtension(language: string): string {

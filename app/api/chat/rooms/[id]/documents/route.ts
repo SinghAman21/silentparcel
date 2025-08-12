@@ -25,12 +25,14 @@ export async function GET(
 
     if (error) {
       console.error('Error getting documents:', error);
+      console.log('chat - get documents failed (database error)');
       return NextResponse.json(
         { error: 'Failed to get documents' },
         { status: 500 }
       );
     }
 
+    console.log('chat - get documents complete');
     return NextResponse.json({
       success: true,
       documents: documents || []
@@ -38,6 +40,7 @@ export async function GET(
 
   } catch (error) {
     console.error('Error getting documents:', error);
+    console.log('chat - get documents failed');
     return NextResponse.json(
       { error: 'Failed to get documents' },
       { status: 500 }
@@ -76,6 +79,7 @@ export async function POST(
       .single();
 
     if (roomError || !room) {
+      console.log('chat - create document failed (room not found)');
       return NextResponse.json(
         { error: 'Room not found or inactive' },
         { status: 404 }
@@ -83,6 +87,7 @@ export async function POST(
     }
 
     if (room.room_type === 'chat') {
+      console.log('chat - create document failed (chat-only room)');
       return NextResponse.json(
         { error: 'Code documents are not supported in chat-only rooms' },
         { status: 400 }
@@ -104,12 +109,14 @@ export async function POST(
 
     if (error) {
       console.error('Error creating document:', error);
+      console.log('chat - create document failed (database error)');
       return NextResponse.json(
         { error: 'Failed to create document' },
         { status: 500 }
       );
     }
 
+    console.log('chat - create document complete');
     return NextResponse.json({
       success: true,
       document
@@ -117,6 +124,7 @@ export async function POST(
 
   } catch (error) {
     console.error('Error creating document:', error);
+    console.log('chat - create document failed');
     return NextResponse.json(
       { error: 'Failed to create document' },
       { status: 500 }
