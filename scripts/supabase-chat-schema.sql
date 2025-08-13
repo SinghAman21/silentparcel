@@ -1,7 +1,7 @@
 -- Enable Row Level Security
-ALTER DATABASE postgres SET "app.jwt_secret" TO 'e9edc828fd6f24858da92576ad6fece5b989cda34ed8d30153dbe6738a55eea11e9f530bb13215aede003252e828422e9edc828fd6f248582ada7e62a6895c29ae3d007a44ca201';
+-- ALTER DATABASE postgres SET "app.jwt_secret" TO 'e9edc828fd6f24858da92576ad6fece5b989cda34ed8d30153dbe6738a55eea11e9f530bb13215aede003252e828422e9edc828fd6f248582ada7e62a6895c29ae3d007a44ca201';
 
--- Create chat_rooms table
+-- Create chat_rooms table with all required attributes
 CREATE TABLE IF NOT EXISTS chat_rooms (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   room_id VARCHAR(8) UNIQUE NOT NULL,
@@ -12,12 +12,10 @@ CREATE TABLE IF NOT EXISTS chat_rooms (
   expires_at TIMESTAMP WITH TIME ZONE,
   is_active BOOLEAN DEFAULT TRUE,
   created_by VARCHAR(255),
-  room_type VARCHAR(20) DEFAULT 'chat' CHECK (room_type IN ('chat', 'code', 'mixed')),
-  default_language VARCHAR(20) DEFAULT 'javascript',
-  collaborative_mode BOOLEAN DEFAULT TRUE
+  room_type VARCHAR(20) DEFAULT 'chat' CHECK (room_type IN ('chat', 'code', 'mixed'))
 );
 
--- Create chat_messages table
+-- Create chat_messages table with foreign key reference
 CREATE TABLE IF NOT EXISTS chat_messages (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   room_id VARCHAR(8) NOT NULL,
@@ -25,10 +23,11 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   message TEXT NOT NULL,
   message_type VARCHAR(20) DEFAULT 'text',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  user_id VARCHAR(255)
+  user_id VARCHAR(255),
+  FOREIGN KEY (room_id) REFERENCES chat_rooms(room_id) ON DELETE CASCADE
 );
 
--- Create chat_participants table
+-- Create chat_participants table with foreign key reference
 CREATE TABLE IF NOT EXISTS chat_participants (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   room_id VARCHAR(8) NOT NULL,
@@ -39,10 +38,11 @@ CREATE TABLE IF NOT EXISTS chat_participants (
   user_id VARCHAR(255),
   cursor_position JSONB,
   cursor_color VARCHAR(7),
-  is_typing BOOLEAN DEFAULT FALSE
+  is_typing BOOLEAN DEFAULT FALSE,
+  FOREIGN KEY (room_id) REFERENCES chat_rooms(room_id) ON DELETE CASCADE
 );
 
--- Create collaborative_code_documents table
+-- Create collaborative_code_documents table with foreign key reference
 CREATE TABLE IF NOT EXISTS collaborative_code_documents (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   room_id VARCHAR(8) NOT NULL,
@@ -52,10 +52,11 @@ CREATE TABLE IF NOT EXISTS collaborative_code_documents (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   created_by VARCHAR(255),
-  is_active BOOLEAN DEFAULT TRUE
+  is_active BOOLEAN DEFAULT TRUE,
+  FOREIGN KEY (room_id) REFERENCES chat_rooms(room_id) ON DELETE CASCADE
 );
 
--- Create user_cursors table for real-time cursor tracking
+-- Create user_cursors table for real-time cursor tracking with foreign key reference
 CREATE TABLE IF NOT EXISTS user_cursors (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   room_id VARCHAR(8) NOT NULL,
@@ -63,20 +64,39 @@ CREATE TABLE IF NOT EXISTS user_cursors (
   username VARCHAR(50) NOT NULL,
   cursor_data JSONB NOT NULL,
   last_updated TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  is_active BOOLEAN DEFAULT TRUE
+  is_active BOOLEAN DEFAULT TRUE,
+  FOREIGN KEY (room_id) REFERENCES chat_rooms(room_id) ON DELETE CASCADE
+);
+
+-- Create audit_logs table for tracking room activities
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  action VARCHAR(50) NOT NULL,
+  resource_type VARCHAR(50) NOT NULL,
+  resource_id VARCHAR(255) NOT NULL,
+  user_id VARCHAR(255),
+  ip_address INET,
+  metadata JSONB,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_chat_rooms_room_id ON chat_rooms(room_id);
 CREATE INDEX IF NOT EXISTS idx_chat_rooms_expires_at ON chat_rooms(expires_at);
 CREATE INDEX IF NOT EXISTS idx_chat_rooms_room_type ON chat_rooms(room_type);
+CREATE INDEX IF NOT EXISTS idx_chat_rooms_created_by ON chat_rooms(created_by);
 CREATE INDEX IF NOT EXISTS idx_chat_messages_room_id ON chat_messages(room_id);
 CREATE INDEX IF NOT EXISTS idx_chat_messages_created_at ON chat_messages(created_at);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_user_id ON chat_messages(user_id);
 CREATE INDEX IF NOT EXISTS idx_chat_participants_room_id ON chat_participants(room_id);
 CREATE INDEX IF NOT EXISTS idx_chat_participants_username ON chat_participants(username);
+CREATE INDEX IF NOT EXISTS idx_chat_participants_user_id ON chat_participants(user_id);
 CREATE INDEX IF NOT EXISTS idx_code_documents_room_id ON collaborative_code_documents(room_id);
+CREATE INDEX IF NOT EXISTS idx_code_documents_language ON collaborative_code_documents(language);
 CREATE INDEX IF NOT EXISTS idx_user_cursors_room_id ON user_cursors(room_id);
 CREATE INDEX IF NOT EXISTS idx_user_cursors_user_id ON user_cursors(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_resource_id ON audit_logs(resource_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
 
 -- Enable Row Level Security
 ALTER TABLE chat_rooms ENABLE ROW LEVEL SECURITY;
@@ -84,6 +104,7 @@ ALTER TABLE chat_messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chat_participants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE collaborative_code_documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_cursors ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 
 -- Create policies for chat_rooms
 CREATE POLICY "Allow public read access to active chat rooms" ON chat_rooms
@@ -159,6 +180,10 @@ CREATE POLICY "Allow update for cursors" ON user_cursors
 CREATE POLICY "Allow delete for cursors" ON user_cursors
   FOR DELETE USING (TRUE);
 
+-- Create policies for audit_logs (read-only for security)
+CREATE POLICY "Allow insert for audit logs" ON audit_logs
+  FOR INSERT WITH CHECK (TRUE);
+
 -- Create function to automatically set expiry time
 CREATE OR REPLACE FUNCTION set_room_expiry()
 RETURNS TRIGGER AS $$
@@ -204,25 +229,9 @@ BEGIN
   SET is_active = FALSE 
   WHERE expires_at < NOW() AND is_active = TRUE;
   
-  DELETE FROM chat_messages 
-  WHERE room_id IN (
-    SELECT room_id FROM chat_rooms WHERE is_active = FALSE
-  );
-  
-  DELETE FROM chat_participants 
-  WHERE room_id IN (
-    SELECT room_id FROM chat_rooms WHERE is_active = FALSE
-  );
-
-  DELETE FROM collaborative_code_documents 
-  WHERE room_id IN (
-    SELECT room_id FROM chat_rooms WHERE is_active = FALSE
-  );
-
-  DELETE FROM user_cursors 
-  WHERE room_id IN (
-    SELECT room_id FROM chat_rooms WHERE is_active = FALSE
-  );
+  -- Delete expired rooms (this will cascade to all related data)
+  DELETE FROM chat_rooms 
+  WHERE expires_at < NOW() AND is_active = FALSE;
 END;
 $$ LANGUAGE plpgsql;
 

@@ -98,6 +98,16 @@ export default function CreateRoomPage() {
 
       const data = await response.json();
       
+      if (!response.ok) {
+        // Handle specific error cases
+        if (response.status === 429) {
+          const resetTime = data.resetTime ? new Date(data.resetTime).toLocaleTimeString() : 'soon';
+          throw new Error(`Rate limit exceeded. You can create ${data.remaining || 0} more rooms. Reset time: ${resetTime}`);
+        }
+        
+        throw new Error(data.error || data.message || 'Failed to create room');
+      }
+      
       if (!data.success) {
         throw new Error(data.error || 'Failed to create room');
       }
@@ -115,9 +125,25 @@ export default function CreateRoomPage() {
       });
     } catch (error) {
       console.error('Error creating room:', error);
+      
+      // Show more specific error messages
+      let errorMessage = 'Failed to create room. Please try again.';
+      
+      if (error instanceof Error) {
+        if (error.message.includes('Rate limit exceeded')) {
+          errorMessage = error.message;
+        } else if (error.message.includes('Invalid room type')) {
+          errorMessage = 'Invalid room type selected. Please try again.';
+        } else if (error.message.includes('Database error')) {
+          errorMessage = 'Server error. Please try again in a moment.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : 'Failed to create room',
+        description: errorMessage,
         variant: "destructive"
       });
       setStage('setup');

@@ -1,15 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { strictRateLimiter } from '@/lib/middleware/rateLimiter';
+import { roomCreationRateLimiter } from '@/lib/middleware/rateLimiter';
 import { generateId, generateRoomPassword, getClientIP } from '@/lib/security';
 import { supabaseAdmin } from '@/lib/supabase';
 
 export async function POST(request: NextRequest) {
   try {
-    // Rate limiting for room creation
-    const rateLimitResult = await strictRateLimiter.isAllowed(request);
+    // Rate limiting for room creation - using optimized rate limiter
+    const rateLimitResult = await roomCreationRateLimiter.isAllowed(request);
     if (!rateLimitResult.allowed) {
+      const resetTime = rateLimitResult.resetTime ? new Date(rateLimitResult.resetTime).toISOString() : null;
       return NextResponse.json(
-        { error: 'Too many room creation attempts. Please try again later.' },
+        { 
+          error: 'Too many room creation attempts. Please try again later.',
+          message: `Rate limit exceeded. You can create ${rateLimitResult.remaining || 0} more rooms.`,
+          resetTime,
+          remaining: rateLimitResult.remaining
+        },
         { status: 429 }
       );
     }
@@ -131,6 +137,9 @@ export async function POST(request: NextRequest) {
         id: creatorId,
         username: creatorUsername,
         isCreator: true
+      },
+      rateLimit: {
+        remaining: rateLimitResult.remaining
       }
     });
 
