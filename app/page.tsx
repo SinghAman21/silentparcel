@@ -448,6 +448,7 @@ export default function Home() {
 							</Link> */}
 						</div>
 
+
                         {/* Stable server placeholder; dynamic badge mounts on client */}
                         <HydrationSafe
                             fallback={<div className="flex justify-center mb-10" id="peerlistBtn" aria-hidden />}
