@@ -8,11 +8,11 @@ import { UTMTrackerWrapper } from "@/components/utm-tracker-wrapper";
 export const metadata: Metadata = {
 	title: {
 		default:
-			"SilentParcel - Secure File Sharing & Anonymous Chat | Zero-Knowledge Encryption",
+			"SilentParcel - Secure File Sharing | Zero-Knowledge Encryption",
 		template: "%s | SilentParcel",
 	},
 	description:
-		"Share files securely with end-to-end encryption and chat anonymously in ephemeral rooms. No registration required. Military-grade AES-256 encryption with automatic virus scanning.",
+		"Share files securely with end-to-end AES-256 encryption and anonymous chat in ephemeral rooms. No registration; automatic virus scanning.",
 	keywords: [
 		"secure file sharing",
 		"encrypted file transfer",
