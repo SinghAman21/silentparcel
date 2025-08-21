@@ -2,12 +2,122 @@ api setup complete --> all done
 captcha not working  --> captcha working (kept on hold due to development) --> removing while uploading, thinking to keep in chatroom feat
 file not uploading --> multiple file selection, upload remaining --> upload success, fetch remaining --> fetch success, download error on device --> download success, opening error --> files and folder can be uploaded at once --> 
 can download zip, or individual files but cant open it --> fixed timezone to india in sql && whole zip 200 && partial zip 500  --> fixed timezone for all tables queries && zip download 200 && partial download 200 --> UI updated by tkshinde --> 
-delete func && cleanup action setup remaining && logs of user in manage page  && end to end encrption of file using crypt4gh package remaining 
-chat not chatting
+delete func && cleanup action setup remaining && logs of user in manage page  && end to end encrption of file using crypt4gh package remaining --> file encrytion 200 --> selective file download --> file update --> file delete --> UI tweaks for /manage/id
+chat not chatting --> supabase setup --> hydration is such a pain ----- add room info --> add participants --> manage chats.
+                                    |
+                                    |
+                                    V  change in plan (luckily i was fixing hydration till now)
+starts a session --> creates link, pass opt -->  screen divides in two 1. main coding screen 2. chat section suboptions in hambergers 2.1 view members && opt to kick them for creator ; on top members count && terminate session 
+1. there we can code in any language providing feat like indentation for python && copy the whole code
+2. users will chat about the topic ( try feat: media )
+2.1 all the session users can see number count and creator can kick if he wants to and terminate session button for him  -- this is the idea im wanting to add in next js typescript for an exisitng project so tell me what are the technologies im goinf to required to execute it. what should be ht estep by step milestone for it and any other opinion
 
-end to end encrption of file using crypt4gh package remaining 
+UI/UX: add a slider between chat and code to adjust width.
+needs login for media sharing, custom room name, password protected rooms & file sharing
+else only chat, file sharign with no extra password
 
-  node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-  node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
-  openssl genrsa -out private.pem 2048
-  openssl rsa -in private.pem -pubout -out public.pem
+Suggestions of techstack: 
+
+Integrate Monaco Editor or similar in the main coding panel.
+https://microsoft.github.io/monaco-editor/docs.html     
+https://github.com/microsoft/monaco-editor
+            |
+            |
+            V https://github.com/yjs/y-monaco  live coding
+Implement real-time syncing of code state through WebSocket.
+Add a "Copy All Code" button.
+
+4. Chat Section with Media Support
+Implement a chat UI beside the coding screen.
+Enable sending and displaying text messages with real-time updates using WebSocket.
+Add file/media upload and preview inside chat messages.
+Store chat messages temporarily, linked to the session.
+
+5. User Management & Session Control UI
+Implement the hamburger menu for chat sub-options.
+Show the live member count at the top.
+List session members with the option for the creator to kick them.
+Add a "Terminate Session" button visible only to the creator.
+Logic for kicking users and session termination should:
+Notify all users via WebSocket.
+Remove kicked users from session data.
+On termination, delete all session-related data (code, chat, members).
+
+6. Security & Access Control
+Protect API routes with authentication and ensure only session creator can kick users or terminate sessions.
+Restrict updates and interactions to session members only.
+Validate all actions server-side.
+
+7. Error Handling and UX Improvements
+Handle disconnections gracefully (e.g., rejoin logic).
+Show user status indicators (e.g., typing, online/offline).
+Provide feedback on invalid actions (e.g., unauthorized kick attempts).
+Auto-cleanup of expired or inactive sessions.
+
+8. Testing and Optimization
+Write comprehensive unit and integration tests for critical flows (session lifecycle, real-time sync, chat, and user management).
+Optimize updates for performance, e.g., debounce rapid code edits.
+Optimize file upload size and media delivery.
+
+9. Deployment & Monitoring
+Deploy with an environment supporting WebSocket connections (e.g., Vercel with websocket support via serverless functions or a separate WebSocket server).
+Monitor sessions, errors, usage metrics, and user behavior.
+Additional Recommendations
+Consider Operational Transformation (OT) or Conflict-free Replicated Data Types (CRDT) libraries for robust real-time code collaboration to handle concurrent edits smoothly.
+Use managed real-time platforms like Stream or PubNub for quicker development of chat and presence features if backend complexity is a concern.
+Build UX with accessibility and responsive design for ease of use on various devices.
+If privacy or ephemeral data is critical, ensure automatic cleanup of session data after termination or inactivity.
+Use secure WebSocket implementation (wss://) and enforce HTTPS for all web traffic.
+
+
+How to Implement E2EE in Chatting and Live Code Sharing
+
+1. Key Setup and Exchange
+Session Creator Generates Keys
+Generate an RSA public/private key pair on the client side when the session is created.
+Generate a symmetric AES key (used for encrypting actual message/code content).
+Distribute AES Key Securely
+For each participant joining the session, encrypt the AES key with that participant’s RSA public key.
+Transmit the encrypted AES key to each participant individually.
+Each participant decrypts the AES key with their own private RSA key.
+This ensures only authorized users can decrypt the AES symmetric key needed to decrypt messages and code.
+
+2. Encryption and Decryption Workflow
+Encrypt Before Sending
+Before sending chat messages, code updates, or files:
+Encrypt the plaintext data with the shared AES key using a secure mode, e.g., AES-GCM for authenticated encryption.
+Send the encrypted data to the server via WebSocket or API. The server only relays encrypted blobs without access to plaintext.
+Decrypt After Receiving
+Upon receiving encrypted payloads from the server:
+Decrypt using the shared AES key locally in the client.
+Render the plaintext chat messages or code updates in the UI.
+
+3. Real-Time Collaborative Code Sharing
+Encrypt Code Changes
+For live code collaboration (e.g., with Monaco Editor), encrypt the code deltas (small changes) or full snapshots before sending via WebSocket.
+On receiving updates from others, decrypt locally and apply to the editor view.
+Handle Synchronization
+Because code editors work with state diffs, ensure that the encryption/decryption happens on the diffs or patches to maintain responsiveness and bandwidth efficiency.
+Optionally, implement Operational Transformation (OT) or CRDT algorithms on plaintext locally, then encrypt outgoing changes.
+
+4. Message and File Encryption Details
+Text Messages
+Convert text to a Uint8Array or string.
+Encrypt with AES-GCM.
+Encode ciphertext for transmission (e.g., base64 or hex).
+Files/Media
+Chunk large files, encrypt each chunk with AES-GCM.
+Transmit chunks over WebSocket or via upload.
+Reassemble and decrypt chunks at recipient’s end.
+
+5. Security and UX Considerations
+Key Management
+Keep RSA private keys only on the client; never send them to the server.
+Use secure channels (HTTPS/WSS) to exchange encrypted keys and messages.
+Consider periodic AES key rotation during long sessions for enhanced security.
+Handling Joins/Leaves
+Distribute AES keys only to active participants.
+When a participant is kicked or leaves, rotate AES keys and redistribute to remaining members.
+Session Termination
+On session termination, discard AES keys and encrypted data to prevent future access.
+

@@ -26,9 +26,10 @@ export function ChatRoomCreator({ onComplete, onBack }: ChatRoomCreatorProps) {
   const [copiedLink, setCopiedLink] = useState(false);
 
   const handleCaptchaComplete = () => {
-    // Generate room credentials
-    const password = Math.random().toString(36).substring(2, 12).toUpperCase();
-    const roomId = Math.random().toString(36).substring(2, 8);
+    // Generate room credentials using timestamp for consistency
+    const timestamp = Date.now();
+    const password = timestamp.toString(36).substring(0, 12).toUpperCase();
+    const roomId = timestamp.toString(36).substring(0, 8);
     const link = `https://silentparcel.vercel.app/rooms/${roomId}`;
     
     setGeneratedPassword(password);
@@ -131,7 +132,7 @@ export function ChatRoomCreator({ onComplete, onBack }: ChatRoomCreatorProps) {
       {stage === 'complete' && (
         <div className="space-y-6">
           <div className="text-center">
-            <h1 className="text-2xl font-bold mb-2">Room Created! 🎉</h1>
+            <h1 className="text-2xl font-bold mb-2">Room Created! ��</h1>
             <p className="text-muted-foreground">
               Your anonymous chat room is ready. Share the password with others to invite them.
             </p>

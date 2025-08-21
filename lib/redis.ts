@@ -1,14 +1,38 @@
 import Redis from 'ioredis';
 
-const redis = new Redis({
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
-  password: process.env.REDIS_PASSWORD,
-  enableReadyCheck: false,
-  maxRetriesPerRequest: null,
-  lazyConnect: true,
-  connectTimeout: 60000,
-});
+// Check if Redis is available
+const isRedisAvailable = process.env.REDIS_HOST || process.env.REDIS_URL;
+
+let redis: Redis | null = null;
+
+if (isRedisAvailable) {
+  try {
+    redis = new Redis({
+      host: process.env.REDIS_HOST || 'localhost',
+      port: parseInt(process.env.REDIS_PORT || '6379'),
+      password: process.env.REDIS_PASSWORD,
+      enableReadyCheck: false,
+      maxRetriesPerRequest: 3,
+      lazyConnect: true,
+      connectTimeout: 60000,
+    });
+
+    // Handle Redis connection errors gracefully
+    redis.on('error', (error) => {
+      console.warn('Redis connection error:', error.message);
+      // Don't throw the error, just log it
+    });
+
+    redis.on('connect', () => {
+      console.log('Redis connected successfully');
+    });
+  } catch (error) {
+    console.warn('Failed to initialize Redis:', error);
+    redis = null;
+  }
+} else {
+  console.log('Redis not configured, running without Redis');
+}
 
 export default redis;
 
@@ -24,13 +48,29 @@ export const REDIS_KEYS = {
 
 // Helper functions
 export const setWithExpiry = async (key: string, value: string, ttl: number) => {
-  await redis.setex(key, ttl, value);
+  if (redis) {
+    try {
+      await redis.setex(key, ttl, value);
+      console.log('redis - setWithExpiry complete');
+    } catch (error) {
+      console.warn('Redis setWithExpiry failed:', error);
+    }
+  }
 };
 
 export const getAndDelete = async (key: string) => {
-  const value = await redis.get(key);
-  if (value) {
-    await redis.del(key);
+  if (redis) {
+    try {
+      const value = await redis.get(key);
+      if (value) {
+        await redis.del(key);
+      }
+      console.log('redis - getAndDelete complete');
+      return value;
+    } catch (error) {
+      console.warn('Redis getAndDelete failed:', error);
+      return null;
+    }
   }
-  return value;
+  return null;
 };
