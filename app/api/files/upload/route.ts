@@ -8,6 +8,13 @@ import FormData from 'form-data';
 import fetch from 'node-fetch';
 import AdmZip from 'adm-zip';
 
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '50mb', 
+    },
+  },
+};
 // Utility function to check environment configuration
 function isProperlyConfigured(): boolean {
   return !(
