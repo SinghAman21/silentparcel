@@ -10,7 +10,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import ThemeToggle from '@/components/theme-toggle';
-import { LeaveRoomDialog } from '@/components/leave-room-dialog';
+import { LeaveRoomDialog } from '@/components/rooms/leave-room-dialog';
 
 interface Message {
   id: string;

@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import ThemeToggle from '@/components/theme-toggle';
-import { LeaveRoomDialog } from '@/components/leave-room-dialog';
+import { LeaveRoomDialog } from '@/components/rooms/leave-room-dialog';
 import { useSupabaseChat, ChatMessage, ChatParticipant } from '@/hooks/use-supabase-chat';
 import dynamic from 'next/dynamic';
 import * as Y from 'yjs';

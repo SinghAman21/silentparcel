@@ -9,8 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import ThemeToggle from "@/components/theme-toggle";
 import Link from "next/link";
-import { SupabaseChatInterface } from "@/components/supabase-chat-interface";
-import { CollaborativeCodeInterface } from "@/components/collaborative-code-interface";
+import { SupabaseChatInterface } from "@/components/rooms/supabase-chat-interface";
+import { CollaborativeCodeInterface } from "@/components/rooms/collaborative-code-interface";
 import { useToast } from "@/hooks/use-toast";
 import { useCallback } from "react";
 

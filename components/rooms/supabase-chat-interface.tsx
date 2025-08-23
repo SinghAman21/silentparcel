@@ -11,7 +11,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import ThemeToggle from '@/components/theme-toggle';
-import { LeaveRoomDialog } from '@/components/leave-room-dialog';
+import { LeaveRoomDialog } from '@/components/rooms/leave-room-dialog';
 import { useSupabaseChat, ChatMessage, ChatParticipant } from '@/hooks/use-supabase-chat';
 
 interface SupabaseChatInterfaceProps {
