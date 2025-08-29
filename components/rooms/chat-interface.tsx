@@ -67,20 +67,17 @@ export function ChatInterface({ roomId, roomPassword, onLeave }: ChatInterfacePr
       avatar: avatars[seededRandom(avatars.length)]
     });
 
-    // Create current user as admin
-    const admin = generateUser(true);
-    setCurrentUser(admin);
-    
-    // Generate some other users
-    const otherUsers = Array.from({ length: seededRandom(4) + 1 }, () => generateUser());
-    setUsers([admin, ...otherUsers]);
+    // FIXED: Only create current user, no phantom users
+    const currentUserData = generateUser(true);
+    setCurrentUser(currentUserData);
+    setUsers([currentUserData]); // Only add the actual current user
 
     // Add welcome message
     setMessages([
       {
         id: '1',
         user: 'System',
-        content: `Welcome to the secret room! You are now ${admin.name} (Admin)`,
+        content: `Welcome to the secret room! You are now ${currentUserData.name} (Admin)`,
         timestamp: new Date(),
         type: 'system'
       }

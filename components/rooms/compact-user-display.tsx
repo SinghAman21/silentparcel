@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MoreHorizontal, Users, Clock } from "lucide-react";
+import { MoreHorizontal, Users, Clock, UserMinus, Crown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -11,6 +11,17 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
 
 interface Participant {
   id: string;
@@ -18,20 +29,36 @@ interface Participant {
   isOnline: boolean;
   lastSeen?: string;
   userId?: string;
+  joinedAt: string;
 }
 
 interface CompactUserDisplayProps {
   participants: Participant[];
   currentUsername: string;
+  isCurrentUserAdmin?: boolean;
+  onKickParticipant?: (targetUsername: string) => Promise<void>;
   maxVisibleAvatars?: number;
 }
 
 export function CompactUserDisplay({
   participants,
   currentUsername,
+  isCurrentUserAdmin = false,
+  onKickParticipant,
   maxVisibleAvatars = 5
 }: CompactUserDisplayProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [kickDialogOpen, setKickDialogOpen] = useState(false);
+  const [userToKick, setUserToKick] = useState<string | null>(null);
+  const [isKicking, setIsKicking] = useState(false);
+  const { toast } = useToast();
+
+  // Check if current user is admin (first participant by join time)
+  const sortedParticipants = [...participants].sort((a, b) => 
+    new Date(a.joinedAt).getTime() - new Date(b.joinedAt).getTime()
+  );
+  const firstParticipant = sortedParticipants.length > 0 ? sortedParticipants[0] : null;
+  const isAdmin = isCurrentUserAdmin || (firstParticipant?.username === currentUsername);
 
   const getParticipantColor = (participantUsername: string) => {
     const colors = ["#ef4444", "#f97316", "#eab308", "#22c55e", "#06b6d4", "#3b82f6", "#8b5cf6", "#ec4899"];
@@ -45,8 +72,38 @@ export function CompactUserDisplay({
     return avatars[index];
   };
 
-  const visibleParticipants = participants.slice(0, maxVisibleAvatars);
-  const hiddenCount = Math.max(0, participants.length - maxVisibleAvatars);
+  const handleKickClick = (username: string) => {
+    setUserToKick(username);
+    setKickDialogOpen(true);
+    setIsExpanded(false);
+  };
+
+  const handleConfirmKick = async () => {
+    if (!userToKick || !onKickParticipant) return;
+    
+    setIsKicking(true);
+    try {
+      await onKickParticipant(userToKick);
+      toast({
+        title: "User Removed",
+        description: `${userToKick} has been removed from the room.`,
+      });
+    } catch (error) {
+      console.error('Failed to kick user:', error);
+      toast({
+        title: "Error",
+        description: "Failed to remove user. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsKicking(false);
+      setKickDialogOpen(false);
+      setUserToKick(null);
+    }
+  };
+
+  const visibleParticipants = sortedParticipants.slice(0, maxVisibleAvatars);
+  const hiddenCount = Math.max(0, sortedParticipants.length - maxVisibleAvatars);
 
   return (
     <div className="flex items-center space-x-2">
@@ -96,7 +153,7 @@ export function CompactUserDisplay({
       {/* User count and 3-dots menu */}
       <div className="flex items-center space-x-2 ml-2">
         <span className="text-sm text-muted-foreground">
-          {participants.length} user{participants.length !== 1 ? 's' : ''}
+          {sortedParticipants.length} user{sortedParticipants.length !== 1 ? 's' : ''}
         </span>
         
         <DropdownMenu open={isExpanded} onOpenChange={setIsExpanded}>
@@ -116,15 +173,23 @@ export function CompactUserDisplay({
           >
             <Card className="border-0 shadow-none">
               <CardHeader className="pb-3">
-                <CardTitle className="flex items-center text-base">
-                  <Users className="h-4 w-4 mr-2" />
-                  Active Users ({participants.length})
+                <CardTitle className="flex items-center justify-between text-base">
+                  <div className="flex items-center">
+                    <Users className="h-4 w-4 mr-2" />
+                    Active Users ({sortedParticipants.length})
+                  </div>
+                  {isAdmin && (
+                    <div className="flex items-center text-xs text-primary">
+                      <Crown className="h-3 w-3 mr-1" />
+                      Admin
+                    </div>
+                  )}
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
                 <ScrollArea className="max-h-80">
                   <div className="px-4 pb-4 space-y-2">
-                    {participants.map((participant) => (
+                    {sortedParticipants.map((participant, index) => (
                       <div 
                         key={participant.id}
                         className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors"
@@ -161,6 +226,12 @@ export function CompactUserDisplay({
                                   You
                                 </span>
                               )}
+                              {index === 0 && (
+                                <span className="text-xs bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 px-2 py-0.5 rounded-full flex items-center">
+                                  <Crown className="h-3 w-3 mr-1" />
+                                  Admin
+                                </span>
+                              )}
                             </div>
                             <div className="flex items-center space-x-1 mt-0.5">
                               <div 
@@ -182,6 +253,21 @@ export function CompactUserDisplay({
                             </div>
                           </div>
                         </div>
+                        
+                        {/* Kick button for admin */}
+                        {isAdmin && 
+                         participant.username !== currentUsername && 
+                         onKickParticipant && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleKickClick(participant.username)}
+                            className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                            title={`Remove ${participant.username} from room`}
+                          >
+                            <UserMinus className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -191,7 +277,7 @@ export function CompactUserDisplay({
                 <div className="border-t border-border/40 px-4 py-3 bg-muted/20">
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span>
-                      {participants.filter(p => p.isOnline).length} online, {participants.filter(p => !p.isOnline).length} offline
+                      {sortedParticipants.filter(p => p.isOnline).length} online, {sortedParticipants.filter(p => !p.isOnline).length} offline
                     </span>
                     <div className="flex items-center space-x-1">
                       <Clock className="h-3 w-3" />
@@ -204,6 +290,31 @@ export function CompactUserDisplay({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+      
+      {/* Kick confirmation dialog */}
+      <AlertDialog open={kickDialogOpen} onOpenChange={setKickDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove User</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove <strong>{userToKick}</strong> from the room? 
+              They will no longer be able to participate in this session.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isKicking}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleConfirmKick}
+              disabled={isKicking}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isKicking ? "Removing..." : "Remove User"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

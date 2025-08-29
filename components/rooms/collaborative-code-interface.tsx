@@ -29,6 +29,7 @@ interface CollaborativeCodeInterfaceProps {
   roomPassword: string;
   userData?: any;
   onLeave: () => void;
+  roomName?: string;
 }
 
 interface CursorPosition {
@@ -51,7 +52,8 @@ export function CollaborativeCodeInterface({
   roomId,
   roomPassword,
   userData,
-  onLeave
+  onLeave,
+  roomName
 }: CollaborativeCodeInterfaceProps) {
   // UI + editor state
   const [message, setMessage] = useState("");
@@ -80,6 +82,8 @@ export function CollaborativeCodeInterface({
 
   // Supabase auth user
   const [userId, setUserId] = useState<string | null>(null);
+  const [isCurrentUserAdmin, setIsCurrentUserAdmin] = useState(false);
+  const [sessionExpiry, setSessionExpiry] = useState<number | null>(null);
 
   const { toast } = useToast();
 
@@ -106,6 +110,7 @@ export function CollaborativeCodeInterface({
     sendMessage,
     joinRoom,
     updateParticipantStatus,
+    kickParticipant,
     clearError
   } = useSupabaseChat(roomId);
 
@@ -117,31 +122,124 @@ export function CollaborativeCodeInterface({
     })();
   }, []);
 
-  // Username (seeded / provided)
+  // FIXED: Comprehensive session and admin role persistence
+  useEffect(() => {
+    const sessionKey = `room_${roomId}_session`;
+    const storedSession = localStorage.getItem(sessionKey);
+    
+    if (storedSession) {
+      try {
+        const session = JSON.parse(storedSession);
+        const now = Date.now();
+        
+        // Check if session is still valid
+        if (session.expiry && now < session.expiry) {
+          if (session.username && !username) {
+            setUsername(session.username);
+          }
+          if (session.isAdmin) {
+            setIsCurrentUserAdmin(true);
+          }
+          setSessionExpiry(session.expiry);
+          
+          // If we have a valid session and userData matches, skip username dialog
+          if (session.username && (!userData || userData.username === session.username)) {
+            setShowUsernameDialog(false);
+          }
+        } else {
+          // Session expired, clean up
+          localStorage.removeItem(sessionKey);
+        }
+      } catch (error) {
+        console.error('Error parsing stored session:', error);
+        localStorage.removeItem(sessionKey);
+      }
+    }
+    
+    // Set up new session if userData is provided
+    if (userData?.username) {
+      const expiry = Date.now() + (2 * 60 * 60 * 1000); // 2 hours
+      const sessionData = {
+        username: userData.username,
+        isAdmin: userData.isAdmin || false,
+        role: userData.isAdmin ? 'admin' : 'participant',
+        joinedAt: new Date().toISOString(),
+        expiry
+      };
+      
+      localStorage.setItem(sessionKey, JSON.stringify(sessionData));
+      setUsername(userData.username);
+      setIsCurrentUserAdmin(userData.isAdmin || false);
+      setSessionExpiry(expiry);
+      setShowUsernameDialog(false);
+    }
+  }, [roomId, userData]);
+
+  // FIXED: Username (seeded / provided) - Prevent automatic phantom user creation
   useEffect(() => {
     if (userData?.username) {
       setUsername(userData.username);
       setShowUsernameDialog(false);
       return;
     }
+    // Don't automatically generate username - wait for user input
     if (!username) {
-      const adjectives = ["Swift", "Silent", "Mystic", "Shadow", "Neon", "Cyber", "Phantom", "Eclipse"];
-      const nouns = ["Fox", "Wolf", "Raven", "Phoenix", "Dragon", "Tiger", "Panther", "Viper"];
-      const seed = roomId.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      const seededRandom = (max: number) => {
-        const x = Math.sin(seed) * 10000;
-        return Math.floor((x - Math.floor(x)) * max);
-      };
-      const randomUsername = `${adjectives[seededRandom(adjectives.length)]}${nouns[seededRandom(nouns.length)]}${String(seededRandom(99)).padStart(2, "0")}`;
-      setUsername(randomUsername);
+      setShowUsernameDialog(true);
     }
   }, [roomId, userData, username]);
 
-  // Timer countdown (unchanged)
+  // FIXED: Determine admin status from participants (fallback for refresh)
   useEffect(() => {
-    const id = setInterval(() => setTimeLeft((s) => Math.max(0, s - 1)), 1000);
-    return () => clearInterval(id);
-  }, []);
+    if (participants.length > 0 && username) {
+      const sortedParticipants = [...participants].sort((a, b) => 
+        new Date(a.joinedAt).getTime() - new Date(b.joinedAt).getTime()
+      );
+      const firstParticipant = sortedParticipants[0];
+      
+      // If current user is the first participant and not already admin, make them admin
+      if (firstParticipant?.username === username && !isCurrentUserAdmin) {
+        setIsCurrentUserAdmin(true);
+        
+        // Update session with admin status
+        const sessionKey = `room_${roomId}_session`;
+        const storedSession = localStorage.getItem(sessionKey);
+        if (storedSession) {
+          try {
+            const session = JSON.parse(storedSession);
+            session.isAdmin = true;
+            session.role = 'admin';
+            localStorage.setItem(sessionKey, JSON.stringify(session));
+          } catch (error) {
+            console.error('Error updating session:', error);
+          }
+        }
+      }
+    }
+  }, [participants, username, roomId, isCurrentUserAdmin]);
+
+  // FIXED: Session expiry monitoring
+  useEffect(() => {
+    if (!sessionExpiry) return;
+    
+    const checkExpiry = () => {
+      const now = Date.now();
+      if (now >= sessionExpiry) {
+        // Session expired
+        const sessionKey = `room_${roomId}_session`;
+        localStorage.removeItem(sessionKey);
+        setIsCurrentUserAdmin(false);
+        setSessionExpiry(null);
+        toast({
+          title: "Session Expired",
+          description: "Your session has expired. Please rejoin the room.",
+          variant: "destructive"
+        });
+      }
+    };
+    
+    const interval = setInterval(checkExpiry, 60000); // Check every minute
+    return () => clearInterval(interval);
+  }, [sessionExpiry, roomId, toast]);
 
   // Ensure a document row exists, and load it
   const ensureAndLoadDocument = useCallback(async () => {
@@ -532,17 +630,34 @@ export function CollaborativeCodeInterface({
     }
   };
 
-  // Join room (chat presence)
+  // Join room (chat presence) - Enhanced to handle userData properly
   useEffect(() => {
-    if (username && !isJoining && !userData?.username) {
-      setIsJoining(true);
-      joinRoom(username)
-        .then(() => setShowUsernameDialog(false))
-        .catch((error) => {
-          console.error("Failed to join room:", error);
-          toast({ title: "Error", description: "Failed to join room", variant: "destructive" });
-        })
-        .finally(() => setIsJoining(false));
+    if (username && !isJoining) {
+      // If userData is provided, we're coming from room join page
+      if (userData?.username && userData.username === username) {
+        setIsJoining(true);
+        joinRoom(username)
+          .then(() => {
+            setShowUsernameDialog(false);
+            console.log(`User ${username} joined room as ${userData.isAdmin ? 'admin' : 'participant'}`);
+          })
+          .catch((error) => {
+            console.error("Failed to join room:", error);
+            toast({ title: "Error", description: "Failed to join room", variant: "destructive" });
+          })
+          .finally(() => setIsJoining(false));
+      }
+      // If no userData but username is set (fallback for manual entry)
+      else if (!userData?.username && username) {
+        setIsJoining(true);
+        joinRoom(username)
+          .then(() => setShowUsernameDialog(false))
+          .catch((error) => {
+            console.error("Failed to join room:", error);
+            toast({ title: "Error", description: "Failed to join room", variant: "destructive" });
+          })
+          .finally(() => setIsJoining(false));
+      }
     }
   }, [joinRoom, isJoining, userData, username, toast]);
 
@@ -566,8 +681,46 @@ export function CollaborativeCodeInterface({
     return avatars[index];
   };
 
-  const handleUsernameSubmit = (newUsername: string) => {
-    if (newUsername.trim()) setUsername(newUsername.trim());
+  const handleUsernameSubmit = async (newUsername: string) => {
+    if (!newUsername.trim()) return;
+    
+    setIsJoining(true);
+    try {
+      const trimmedUsername = newUsername.trim();
+      setUsername(trimmedUsername);
+      
+      // Create session for manual username entry
+      const sessionKey = `room_${roomId}_session`;
+      const expiry = Date.now() + (2 * 60 * 60 * 1000); // 2 hours
+      const sessionData = {
+        username: trimmedUsername,
+        isAdmin: false, // Will be updated if user is first to join
+        role: 'participant',
+        joinedAt: new Date().toISOString(),
+        expiry
+      };
+      
+      localStorage.setItem(sessionKey, JSON.stringify(sessionData));
+      setSessionExpiry(expiry);
+      
+      // Join room after setting username
+      await joinRoom(trimmedUsername);
+      setShowUsernameDialog(false);
+      
+      toast({
+        title: "Success",
+        description: "Successfully joined the collaborative coding room!",
+      });
+    } catch (error) {
+      console.error('Failed to join room:', error);
+      toast({
+        title: "Error",
+        description: "Failed to join room. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsJoining(false);
+    }
   };
 
   const handleLeaveRoom = () => setShowLeaveDialog(true);
@@ -592,9 +745,38 @@ export function CollaborativeCodeInterface({
     }
   };
 
+  const handleKickParticipant = async (targetUsername: string) => {
+    if (!isCurrentUserAdmin && !userData?.isAdmin) {
+      toast({
+        title: "Error",
+        description: "Only the room admin can remove participants.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      await kickParticipant(targetUsername, username, userId || 'anonymous');
+    } catch (error) {
+      console.error('Failed to kick participant:', error);
+      throw error; // Re-throw to let CompactUserDisplay handle the error
+    }
+  };
+
   const confirmLeaveRoom = async () => {
     try {
       await updateParticipantStatus(username, false);
+      
+      // Clean up session data when leaving
+      const sessionKey = `room_${roomId}_session`;
+      localStorage.removeItem(sessionKey);
+      setIsCurrentUserAdmin(false);
+      setSessionExpiry(null);
+      
+      toast({
+        title: "Left Room",
+        description: "You have successfully left the room.",
+      });
     } catch (error) {
       console.error("Failed to update participant status:", error);
     }
@@ -757,8 +939,21 @@ export function CollaborativeCodeInterface({
       <div className="border-b border-border/40 p-4 bg-background/80 backdrop-blur-xs shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex-1">
-            <h1 className="font-bold">Collaborative Code Room #{roomId}</h1>
-            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+            <h1 className="font-bold text-lg">{roomName || 'Collaborative Code Room'}</h1>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-sm text-muted-foreground">Room ID:</span>
+              <code 
+                className="bg-muted/50 px-2 py-1 rounded text-sm font-mono cursor-pointer hover:bg-muted transition-colors"
+                onClick={() => {
+                  navigator.clipboard.writeText(roomId);
+                  toast({ title: "Copied!", description: "Room ID copied to clipboard" });
+                }}
+                title="Click to copy room ID"
+              >
+                {roomId}
+              </code>
+            </div>
+            <div className="flex items-center gap-3 text-sm text-muted-foreground mt-2">
               <span className="inline-flex items-center gap-1">
                 <Clock className="h-3 w-3" />
                 Self-destructs in {formatTime(timeLeft)}
@@ -782,6 +977,8 @@ export function CollaborativeCodeInterface({
             <CompactUserDisplay 
               participants={participants}
               currentUsername={username}
+              isCurrentUserAdmin={isCurrentUserAdmin || userData?.isAdmin || false}
+              onKickParticipant={handleKickParticipant}
               maxVisibleAvatars={5}
             />
             

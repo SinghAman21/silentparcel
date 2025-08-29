@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Send, Paperclip, Users, Crown, Shield, Clock, LogOut, MoreVertical, Wifi, WifiOff, AlertCircle } from 'lucide-react';
+import { Send, Paperclip, Users, Crown, Shield, Clock, LogOut, MoreVertical, Wifi, WifiOff, AlertCircle, UserMinus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -10,6 +10,16 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import ThemeToggle from '@/components/theme-toggle';
 import { LeaveRoomDialog } from '@/components/rooms/leave-room-dialog';
 import { useSupabaseChat, ChatMessage, ChatParticipant } from '@/hooks/use-supabase-chat';
@@ -20,9 +30,10 @@ interface SupabaseChatInterfaceProps {
   roomPassword: string;
   userData?: any; // Add userData prop
   onLeave: () => void;
+  roomName?: string;
 }
 
-export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave }: SupabaseChatInterfaceProps) {
+export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave, roomName }: SupabaseChatInterfaceProps) {
   const [message, setMessage] = useState('');
   const [username, setUsername] = useState('');
   const [showUsernameDialog, setShowUsernameDialog] = useState(true);
@@ -30,6 +41,11 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave 
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [kickDialogOpen, setKickDialogOpen] = useState(false);
+  const [userToKick, setUserToKick] = useState<string | null>(null);
+  const [isKicking, setIsKicking] = useState(false);
+  const [isCurrentUserAdmin, setIsCurrentUserAdmin] = useState(false);
+  const [sessionExpiry, setSessionExpiry] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -41,51 +57,176 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave 
     sendMessage,
     joinRoom,
     updateParticipantStatus,
+    kickParticipant,
     clearError
   } = useSupabaseChat(roomId);
 
-  // Set username on mount
+  // FIXED: Comprehensive session and admin role persistence
   useEffect(() => {
+    const sessionKey = `room_${roomId}_session`;
+    const storedSession = localStorage.getItem(sessionKey);
+    
+    if (storedSession) {
+      try {
+        const session = JSON.parse(storedSession);
+        const now = Date.now();
+        
+        // Check if session is still valid
+        if (session.expiry && now < session.expiry) {
+          if (session.username && !username) {
+            setUsername(session.username);
+          }
+          if (session.isAdmin) {
+            setIsCurrentUserAdmin(true);
+          }
+          setSessionExpiry(session.expiry);
+          
+          // If we have a valid session and userData matches, skip username dialog
+          if (session.username && (!userData || userData.username === session.username)) {
+            setShowUsernameDialog(false);
+          }
+        } else {
+          // Session expired, clean up
+          localStorage.removeItem(sessionKey);
+        }
+      } catch (error) {
+        console.error('Error parsing stored session:', error);
+        localStorage.removeItem(sessionKey);
+      }
+    }
+    
+    // Set up new session if userData is provided
     if (userData?.username) {
-      setUsername(userData.username);
-      setShowUsernameDialog(false);
-    } else if (!username) {
-      const adjectives = ['Swift', 'Silent', 'Mystic', 'Shadow', 'Neon', 'Cyber', 'Phantom', 'Eclipse'];
-      const nouns = ['Fox', 'Wolf', 'Raven', 'Phoenix', 'Dragon', 'Tiger', 'Panther', 'Viper'];
-      
-      // Use roomId as seed for consistent generation
-      const seed = roomId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      const seededRandom = (max: number) => {
-        const x = Math.sin(seed) * 10000;
-        return Math.floor((x - Math.floor(x)) * max);
+      const expiry = Date.now() + (2 * 60 * 60 * 1000); // 2 hours
+      const sessionData = {
+        username: userData.username,
+        isAdmin: userData.isAdmin || false,
+        role: userData.isAdmin ? 'admin' : 'participant',
+        joinedAt: new Date().toISOString(),
+        expiry
       };
       
-      const randomUsername = `${adjectives[seededRandom(adjectives.length)]}${nouns[seededRandom(nouns.length)]}${seededRandom(99)}`;
-      setUsername(randomUsername);
+      localStorage.setItem(sessionKey, JSON.stringify(sessionData));
+      setUsername(userData.username);
+      setIsCurrentUserAdmin(userData.isAdmin || false);
+      setSessionExpiry(expiry);
+      setShowUsernameDialog(false);
     }
-  }, [username, userData, roomId]);
+  }, [roomId, userData]);
 
-  // Join room when username is set
+  // FIXED: Determine admin status from participants (fallback for refresh)
   useEffect(() => {
-    if (username && !isJoining && !userData?.username) {
-      setIsJoining(true);
-      joinRoom(username)
-        .then(() => {
-          setShowUsernameDialog(false);
-        })
-        .catch((error) => {
-          console.error('Failed to join room:', error);
-          toast({
-            title: "Error",
-            description: "Failed to join room. Please try again.",
-            variant: "destructive"
-          });
-        })
-        .finally(() => {
-          setIsJoining(false);
-        });
+    if (participants.length > 0 && username) {
+      const sortedParticipants = [...participants].sort((a, b) => 
+        new Date(a.joinedAt).getTime() - new Date(b.joinedAt).getTime()
+      );
+      const firstParticipant = sortedParticipants[0];
+      
+      // If current user is the first participant and not already admin, make them admin
+      if (firstParticipant?.username === username && !isCurrentUserAdmin) {
+        setIsCurrentUserAdmin(true);
+        
+        // Update session with admin status
+        const sessionKey = `room_${roomId}_session`;
+        const storedSession = localStorage.getItem(sessionKey);
+        if (storedSession) {
+          try {
+            const session = JSON.parse(storedSession);
+            session.isAdmin = true;
+            session.role = 'admin';
+            localStorage.setItem(sessionKey, JSON.stringify(session));
+          } catch (error) {
+            console.error('Error updating session:', error);
+          }
+        }
+      }
     }
-  }, [username, joinRoom, isJoining, userData]);
+  }, [participants, username, roomId, isCurrentUserAdmin]);
+
+  // FIXED: Session expiry monitoring
+  useEffect(() => {
+    if (!sessionExpiry) return;
+    
+    const checkExpiry = () => {
+      const now = Date.now();
+      if (now >= sessionExpiry) {
+        // Session expired
+        const sessionKey = `room_${roomId}_session`;
+        localStorage.removeItem(sessionKey);
+        setIsCurrentUserAdmin(false);
+        setSessionExpiry(null);
+        toast({
+          title: "Session Expired",
+          description: "Your session has expired. Please rejoin the room.",
+          variant: "destructive"
+        });
+      }
+    };
+    
+    const interval = setInterval(checkExpiry, 60000); // Check every minute
+    return () => clearInterval(interval);
+  }, [sessionExpiry, roomId, toast]);
+
+  // FIXED: Enhanced join room logic with session management
+  useEffect(() => {
+    if (username && !isJoining) {
+      // Skip if we already have a valid session
+      const sessionKey = `room_${roomId}_session`;
+      const storedSession = localStorage.getItem(sessionKey);
+      
+      if (storedSession) {
+        try {
+          const session = JSON.parse(storedSession);
+          if (session.username === username && session.expiry > Date.now()) {
+            // Valid session exists, no need to rejoin
+            setShowUsernameDialog(false);
+            return;
+          }
+        } catch (error) {
+          console.error('Error parsing session:', error);
+        }
+      }
+      
+      // Join room if we have userData or username but no valid session
+      if ((userData?.username && userData.username === username) || (!userData?.username && username)) {
+        setIsJoining(true);
+        joinRoom(username)
+          .then(() => {
+            setShowUsernameDialog(false);
+            
+            // Create session after successful join
+            const expiry = Date.now() + (2 * 60 * 60 * 1000); // 2 hours
+            const sessionData = {
+              username,
+              isAdmin: userData?.isAdmin || false,
+              role: userData?.isAdmin ? 'admin' : 'participant',
+              joinedAt: new Date().toISOString(),
+              expiry
+            };
+            
+            localStorage.setItem(sessionKey, JSON.stringify(sessionData));
+            setSessionExpiry(expiry);
+            
+            console.log(`User ${username} joined room as ${userData?.isAdmin ? 'admin' : 'participant'}`);
+            toast({
+              title: "Success",
+              description: `Joined room as ${userData?.isAdmin ? 'Admin' : 'Participant'}`,
+            });
+          })
+          .catch((error) => {
+            console.error('Failed to join room:', error);
+            toast({
+              title: "Error",
+              description: "Failed to join room. Please try again.",
+              variant: "destructive"
+            });
+          })
+          .finally(() => {
+            setIsJoining(false);
+          });
+      }
+    }
+  }, [username, joinRoom, isJoining, userData, roomId, toast]);
 
   // Timer countdown
   useEffect(() => {
@@ -129,7 +270,22 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave 
 
   const handleUsernameSubmit = (newUsername: string) => {
     if (newUsername.trim()) {
-      setUsername(newUsername.trim());
+      const trimmedUsername = newUsername.trim();
+      setUsername(trimmedUsername);
+      
+      // Create session for manual username entry
+      const sessionKey = `room_${roomId}_session`;
+      const expiry = Date.now() + (2 * 60 * 60 * 1000); // 2 hours
+      const sessionData = {
+        username: trimmedUsername,
+        isAdmin: false, // Will be updated if user is first to join
+        role: 'participant',
+        joinedAt: new Date().toISOString(),
+        expiry
+      };
+      
+      localStorage.setItem(sessionKey, JSON.stringify(sessionData));
+      setSessionExpiry(expiry);
     }
   };
 
@@ -140,6 +296,17 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave 
   const confirmLeaveRoom = async () => {
     try {
       await updateParticipantStatus(username, false);
+      
+      // Clean up session data when leaving
+      const sessionKey = `room_${roomId}_session`;
+      localStorage.removeItem(sessionKey);
+      setIsCurrentUserAdmin(false);
+      setSessionExpiry(null);
+      
+      toast({
+        title: "Left Room",
+        description: "You have successfully left the room.",
+      });
     } catch (error) {
       console.error('Failed to update participant status:', error);
     }
@@ -157,6 +324,42 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave 
     const avatars = ['🦊', '🐺', '🦝', '🐧', '🦔', '🐨', '🐯', '🦁', '🐸', '🐙'];
     const index = participantUsername.length % avatars.length;
     return avatars[index];
+  };
+
+  // FIXED: Use persistent admin status
+  const sortedParticipants = [...participants].sort((a, b) => 
+    new Date(a.joinedAt).getTime() - new Date(b.joinedAt).getTime()
+  );
+  const adminStatus = isCurrentUserAdmin || 
+    (sortedParticipants.length > 0 && sortedParticipants[0]?.username === username);
+
+  const handleKickClick = (targetUsername: string) => {
+    setUserToKick(targetUsername);
+    setKickDialogOpen(true);
+  };
+
+  const handleConfirmKick = async () => {
+    if (!userToKick) return;
+    
+    setIsKicking(true);
+    try {
+      await kickParticipant(userToKick, username, 'admin-user-id');
+      toast({
+        title: "User Removed",
+        description: `${userToKick} has been removed from the room.`,
+      });
+    } catch (error) {
+      console.error('Failed to kick user:', error);
+      toast({
+        title: "Error",
+        description: "Failed to remove user. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsKicking(false);
+      setKickDialogOpen(false);
+      setUserToKick(null);
+    }
   };
 
   if (showUsernameDialog) {
@@ -197,7 +400,20 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave 
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <div>
-              <h1 className="font-bold">Secret Room #{roomId}</h1>
+              <h1 className="font-bold text-lg">{roomName || 'Secret Chat Room'}</h1>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-sm text-muted-foreground">Room ID:</span>
+                <code 
+                  className="bg-muted/50 px-2 py-1 rounded text-sm font-mono cursor-pointer hover:bg-muted transition-colors"
+                  onClick={() => {
+                    navigator.clipboard.writeText(roomId);
+                    toast({ title: "Copied!", description: "Room ID copied to clipboard" });
+                  }}
+                  title="Click to copy room ID"
+                >
+                  {roomId}
+                </code>
+              </div>
               <div className="flex items-center space-x-2 text-sm text-muted-foreground">
                 <Clock className="h-3 w-3" />
                 <span>Self-destructs in {formatTime(timeLeft)}</span>
@@ -321,15 +537,23 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave 
         {/* Users Sidebar */}
         <div className="w-72 border-l border-border/40 bg-muted/20 shrink-0 hidden md:flex flex-col">
           <div className="p-4 border-b border-border/40 shrink-0">
-            <h3 className="font-semibold flex items-center">
-              <Users className="h-4 w-4 mr-2" />
-              Users ({participants.length})
+            <h3 className="font-semibold flex items-center justify-between">
+              <div className="flex items-center">
+                <Users className="h-4 w-4 mr-2" />
+                Users ({sortedParticipants.length})
+              </div>
+              {adminStatus && (
+                <div className="flex items-center text-xs text-primary">
+                  <Crown className="h-3 w-3 mr-1" />
+                  Admin
+                </div>
+              )}
             </h3>
           </div>
           
           <ScrollArea className="flex-1">
             <div className="p-2 space-y-1">
-              {participants.map((participant) => (
+              {sortedParticipants.map((participant, index) => (
                 <div key={participant.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50 transition-colors">
                   <div className="flex items-center space-x-3 min-w-0 flex-1">
                     <Avatar className="w-8 h-8 shrink-0">
@@ -349,12 +573,32 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave 
                           {participant.username}
                         </span>
                         <div className={`w-2 h-2 rounded-full ${participant.isOnline ? 'bg-green-500' : 'bg-gray-400'}`} />
+                        {index === 0 && (
+                          <span className="text-xs bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 px-2 py-0.5 rounded-full flex items-center">
+                            <Crown className="h-3 w-3 mr-1" />
+                            Admin
+                          </span>
+                        )}
                       </div>
                       {participant.username === username && (
                         <span className="text-xs text-muted-foreground">You</span>
                       )}
                     </div>
                   </div>
+                  
+                  {/* Kick button for admin */}
+                  {adminStatus && 
+                   participant.username !== username && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleKickClick(participant.username)}
+                      className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                      title={`Remove ${participant.username} from room`}
+                    >
+                      <UserMinus className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
               ))}
             </div>
@@ -368,6 +612,31 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave 
         onCancel={() => setShowLeaveDialog(false)}
         roomId={roomId}
       />
+      
+      {/* Kick confirmation dialog */}
+      <AlertDialog open={kickDialogOpen} onOpenChange={setKickDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove User</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove <strong>{userToKick}</strong> from the room? 
+              They will no longer be able to participate in this session.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isKicking}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleConfirmKick}
+              disabled={isKicking}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isKicking ? "Removing..." : "Remove User"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 } 

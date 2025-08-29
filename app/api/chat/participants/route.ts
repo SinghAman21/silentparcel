@@ -222,4 +222,114 @@ export async function PUT(request: NextRequest) {
       { status: 500 }
     );
   }
-} 
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const { roomId, targetUsername, adminUsername, adminUserId } = await request.json();
+
+    if (!roomId || !targetUsername || !adminUsername) {
+      return NextResponse.json(
+        { error: 'Room ID, target username, and admin username are required' },
+        { status: 400 }
+      );
+    }
+
+    // Verify room exists and is active
+    const { data: room, error: roomError } = await supabaseAdmin
+      .from('chat_rooms')
+      .select('*')
+      .eq('room_id', roomId)
+      .eq('is_active', true)
+      .single();
+
+    if (roomError || !room) {
+      return NextResponse.json(
+        { error: 'Room not found or inactive' },
+        { status: 404 }
+      );
+    }
+
+    // Verify admin is the first participant (has admin privileges)
+    const { data: participants, error: participantsError } = await supabaseAdmin
+      .from('chat_participants')
+      .select('*')
+      .eq('room_id', roomId)
+      .order('joined_at', { ascending: true });
+
+    if (participantsError || !participants || participants.length === 0) {
+      return NextResponse.json(
+        { error: 'No participants found' },
+        { status: 404 }
+      );
+    }
+
+    // Check if the admin is actually the first user (room admin)
+    const firstParticipant = participants[0];
+    if (firstParticipant.username !== adminUsername) {
+      return NextResponse.json(
+        { error: 'Only the room admin can kick participants' },
+        { status: 403 }
+      );
+    }
+
+    // Cannot kick yourself
+    if (targetUsername === adminUsername) {
+      return NextResponse.json(
+        { error: 'Cannot kick yourself' },
+        { status: 400 }
+      );
+    }
+
+    // Find the target participant
+    const targetParticipant = participants.find((p: any) => p.username === targetUsername);
+    if (!targetParticipant) {
+      return NextResponse.json(
+        { error: 'Target participant not found' },
+        { status: 404 }
+      );
+    }
+
+    // Remove the participant from the room
+    const { error: deleteError } = await supabaseAdmin
+      .from('chat_participants')
+      .delete()
+      .eq('id', targetParticipant.id);
+
+    if (deleteError) {
+      console.error('Error removing participant:', deleteError);
+      return NextResponse.json(
+        { error: 'Failed to remove participant' },
+        { status: 500 }
+      );
+    }
+
+    // Send a system message about the kick
+    const { error: messageError } = await supabaseAdmin
+      .from('chat_messages')
+      .insert({
+        room_id: roomId,
+        username: 'System',
+        user_id: 'system',
+        message: `${targetUsername} has been removed from the room by ${adminUsername}`,
+        message_type: 'system'
+      });
+
+    if (messageError) {
+      console.error('Error sending system message:', messageError);
+      // Don't fail the request if system message fails
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `${targetUsername} has been removed from the room`
+    });
+
+  } catch (error) {
+    console.error('Error in participant removal:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}

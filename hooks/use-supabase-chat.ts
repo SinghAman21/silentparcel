@@ -53,6 +53,7 @@ export interface ChatActions {
   sendMessage: (message: string, username: string, messageType?: 'text' | 'system' | 'file') => Promise<ChatMessage>;
   joinRoom: (username: string) => Promise<ChatParticipant>;
   updateParticipantStatus: (username: string, isOnline: boolean) => Promise<ChatParticipant>;
+  kickParticipant: (targetUsername: string, adminUsername: string, adminUserId: string) => Promise<void>;
   fetchMessages: (limit?: number) => Promise<void>;
   fetchParticipants: () => Promise<void>;
   reconnect: () => Promise<void>;
@@ -146,6 +147,13 @@ class ChatAPIClient {
     return this.makeRequest('/api/chat/participants', {
       method: 'PUT',
       body: JSON.stringify({ roomId, username, userId, isOnline }),
+    });
+  }
+
+  static async kickParticipant(roomId: string, targetUsername: string, adminUsername: string, adminUserId: string): Promise<{ message: string }> {
+    return this.makeRequest('/api/chat/participants', {
+      method: 'DELETE',
+      body: JSON.stringify({ roomId, targetUsername, adminUsername, adminUserId }),
     });
   }
 }
@@ -325,6 +333,32 @@ export const useSupabaseChat = (roomId: string): ChatState & ChatActions => {
     }
   }, [roomIdRef, userId, setError]);
 
+  // Kick participant (admin only)
+  const kickParticipant = useCallback(async (targetUsername: string, adminUsername: string, adminUserId: string): Promise<void> => {
+    if (!roomIdRef) {
+      throw new Error('Room ID is required');
+    }
+
+    if (!targetUsername?.trim() || !adminUsername?.trim()) {
+      const errMsg = 'Target username and admin username are required';
+      setError(createError('USERNAME_REQUIRED', errMsg));
+      throw new Error(errMsg);
+    }
+
+    try {
+      setError(null);
+      await ChatAPIClient.kickParticipant(roomIdRef, targetUsername, adminUsername, adminUserId);
+      
+      // Refresh participants list
+      await fetchParticipants();
+    } catch (error) {
+      console.error('Error kicking participant:', error);
+      const chatError = createError('KICK_PARTICIPANT_FAILED', error instanceof Error ? error.message : 'Failed to kick participant');
+      setError(chatError);
+      throw error;
+    }
+  }, [roomIdRef, setError, fetchParticipants]);
+
   // Reconnect function
   const reconnect = useCallback(async () => {
     if (!roomIdRef) return;
@@ -449,6 +483,24 @@ export const useSupabaseChat = (roomId: string): ChatState & ChatActions => {
             }
           }
         )
+        .on(
+          'postgres_changes',
+          {
+            event: 'DELETE',
+            schema: 'public',
+            table: 'chat_participants',
+            filter: `room_id=eq.${roomIdRef}`,
+          },
+          (payload: RealtimePostgresChangesPayload<any>) => {
+            const deletedParticipant = payload.old as any;
+            if (deletedParticipant?.id && isMountedRef.current) {
+              setState(prev => ({
+                ...prev,
+                participants: prev.participants.filter(p => p.id !== deletedParticipant.id),
+              }));
+            }
+          }
+        )
         .subscribe((status: string) => {
           console.log(`Real-time connection status: ${status}`);
           setConnected(status === 'SUBSCRIBED');
@@ -466,15 +518,27 @@ export const useSupabaseChat = (roomId: string): ChatState & ChatActions => {
     }
   }, [roomIdRef, setConnected, setError, reconnect]);
 
-  // Initialize connection
+  // Initialize connection and fetch data
   useEffect(() => {
     if (!roomIdRef) return;
 
     isMountedRef.current = true;
 
-    // Fetch initial data
-    fetchMessages();
-    fetchParticipants();
+    // Fetch initial data with priority on participants
+    const initializeRoom = async () => {
+      try {
+        // Fetch participants first to establish current room state
+        await fetchParticipants();
+        // Then fetch messages
+        await fetchMessages();
+        
+        console.log('Room initialized with participants and messages');
+      } catch (error) {
+        console.error('Failed to initialize room:', error);
+      }
+    };
+
+    initializeRoom();
 
     // Setup real-time connection
     setupRealtimeConnection();
@@ -547,6 +611,7 @@ export const useSupabaseChat = (roomId: string): ChatState & ChatActions => {
     sendMessage,
     joinRoom,
     updateParticipantStatus,
+    kickParticipant,
     fetchMessages,
     fetchParticipants,
     reconnect,
