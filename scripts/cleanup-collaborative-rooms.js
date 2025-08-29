@@ -79,6 +79,8 @@ async function cleanupCollaborativeRooms() {
 
         if (documentsError) {
           console.error(`Error deleting code documents for room ${roomId}:`, documentsError);
+        } else {
+          console.log(`✓ Deleted code documents for room ${roomId}`);
         }
       }
 

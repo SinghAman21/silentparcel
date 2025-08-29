@@ -69,6 +69,8 @@ export function CollaborativeCodeInterface({
   const [initialCode, setInitialCode] = useState<string>("");
   const [lastEditorName, setLastEditorName] = useState<string>("-");
   const [lastEditedAt, setLastEditedAt] = useState<string>("-");
+  const [lastEditedBy, setLastEditedBy] = useState<string | null>(null);
+  const [currentDocumentId, setCurrentDocumentId] = useState<string | null>(null);
 
   // Supabase auth user
   const [userId, setUserId] = useState<string | null>(null);
@@ -135,59 +137,115 @@ export function CollaborativeCodeInterface({
 
   // Ensure a document row exists, and load it
   const ensureAndLoadDocument = useCallback(async () => {
-    // Try fetch the doc
-    const { data, error } = await supabase
-      .from(DOCUMENT_TABLE)
-      .select("content, updated_at, last_edited_by")
-      .eq("room_id", roomId)
-      .eq("document_name", DOCUMENT_NAME)
-      .maybeSingle();
-
-    if (error) {
-      console.error("Load doc error:", error);
-    }
-
-    if (!data) {
-      // Create initial document row
-      const { error: insertErr } = await supabase.from(DOCUMENT_TABLE).insert({
-        room_id: roomId,
-        document_name: DOCUMENT_NAME,
-        language: selectedLanguage,
-        content: "",
-        created_by: userId ?? null,
-        last_edited_by: userId ?? null
+    try {
+      console.log(`Loading documents for room: ${roomId}`);
+      
+      // Try to fetch existing documents via API
+      const response = await fetch(`/api/chat/rooms/${roomId}/documents`);
+      const data = await response.json();
+      
+      if (!response.ok) {
+        console.error('Error fetching documents:', data);
+        
+        if (response.status === 404) {
+          toast({
+            title: "Room Not Found",
+            description: data.details || `Room ${roomId} does not exist`,
+            variant: "destructive"
+          });
+        } else if (response.status === 410) {
+          toast({
+            title: "Room Expired",
+            description: data.details || `Room ${roomId} has expired or been deactivated`,
+            variant: "destructive"
+          });
+        } else {
+          toast({
+            title: "Error Loading Documents",
+            description: data.error || "Failed to load documents",
+            variant: "destructive"
+          });
+        }
+        
+        // Set fallback empty document
+        setInitialCode("");
+        lastLocalContentRef.current = "";
+        return;
+      }
+      
+      if (data.success && data.documents && data.documents.length > 0) {
+        // Use the first document (or find the main one)
+        const doc = data.documents.find((d: any) => d.documentName === DOCUMENT_NAME) || data.documents[0];
+        const content = doc.content || "";
+        
+        console.log(`Loaded document: ${doc.documentName} (${doc.language})`);
+        
+        setInitialCode(content);
+        lastLocalContentRef.current = content;
+        setSelectedLanguage(doc.language || "javascript");
+        setLastEditedBy(doc.lastEditedBy);
+        setCurrentDocumentId(doc.id);
+        
+        if (doc.updatedAt) {
+          setLastEditedAt(new Date(doc.updatedAt).toLocaleString());
+        }
+        
+        // Resolve last editor username
+        if (doc.lastEditedBy) {
+          const participant = participants.find(p => p.userId === doc.lastEditedBy);
+          setLastEditorName(participant?.username || "Unknown");
+        }
+      } else {
+        console.log('No existing documents, creating initial document');
+        
+        // Create initial document via API
+        const createResponse = await fetch(`/api/chat/rooms/${roomId}/documents`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            documentName: DOCUMENT_NAME,
+            language: selectedLanguage,
+            content: "",
+            userId: userId
+          })
+        });
+        
+        if (!createResponse.ok) {
+          const errorData = await createResponse.json();
+          console.error('Error creating document:', errorData);
+          
+          toast({
+            title: "Error Creating Document",
+            description: errorData.details || errorData.error || "Failed to create initial document",
+            variant: "destructive"
+          });
+        } else {
+          const createData = await createResponse.json();
+          if (createData.success && createData.document) {
+            setCurrentDocumentId(createData.document.id);
+            console.log(`Created initial document: ${createData.document.id}`);
+          }
+        }
+        
+        setInitialCode("");
+        setLastEditorName(username || "-");
+        setLastEditedAt(new Date().toLocaleString());
+        lastLocalContentRef.current = "";
+      }
+    } catch (error) {
+      console.error("Exception loading document:", error);
+      
+      toast({
+        title: "Connection Error",
+        description: "Failed to connect to the server. Please check your connection and try again.",
+        variant: "destructive"
       });
-      if (insertErr) console.error("Insert doc error:", insertErr);
+      
+      // Fallback to empty document
       setInitialCode("");
-      setLastEditorName(username || "-");
-      setLastEditedAt(new Date().toLocaleString());
       lastLocalContentRef.current = "";
-      return;
     }
-
-    // Set content locally
-    const content = data.content ?? "";
-    setInitialCode(content);
-    lastLocalContentRef.current = content;
-
-    // Set updated_at
-    if (data.updated_at) {
-      setLastEditedAt(new Date(data.updated_at).toLocaleString());
-    }
-
-    // Resolve last_edited_by to a username (best-effort via chat_participants)
-    if (data.last_edited_by) {
-      const { data: part } = await supabase
-        .from("chat_participants")
-        .select("username")
-        .eq("room_id", roomId)
-        .eq("user_id", data.last_edited_by)
-        .maybeSingle();
-      setLastEditorName(part?.username ?? "Unknown");
-    } else {
-      setLastEditorName("-");
-    }
-  }, [roomId, selectedLanguage, userId, username]);
+  }, [roomId, selectedLanguage, userId, username, participants, toast]);
 
   // Supabase Realtime channel: code + cursor broadcasts
   useEffect(() => {
@@ -363,32 +421,43 @@ export function CollaborativeCodeInterface({
             console.error("Broadcast code-update failed:", err);
           }
 
-          // Persist to DB (secure; sets last_edited_by)
+          // Persist to DB via API
           try {
-            // Update language row (ensure row exists)
-            const { error } = await supabase
-              .from(DOCUMENT_TABLE)
-              .update({
-                content,
-                language: selectedLanguage,
-                last_edited_by: userId // RLS expects auth.uid() to match this client; do not use service role here
-              })
-              .eq("room_id", roomId)
-              .eq("document_name", DOCUMENT_NAME);
-
-            if (error) {
-              // If not exists, insert (race-safe if you add unique (room_id, document_name))
-              if (error.code === "PGRST116") {
-                await supabase.from(DOCUMENT_TABLE).insert({
-                  room_id: roomId,
-                  document_name: DOCUMENT_NAME,
+            if (currentDocumentId) {
+              // Update existing document
+              const response = await fetch(`/api/chat/rooms/${roomId}/documents/${currentDocumentId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  content,
+                  language: selectedLanguage,
+                  userId: userId
+                })
+              });
+              
+              if (!response.ok) {
+                console.error('Failed to update document via API');
+              }
+            } else {
+              // Create new document
+              const response = await fetch(`/api/chat/rooms/${roomId}/documents`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  documentName: DOCUMENT_NAME,
                   language: selectedLanguage,
                   content,
-                  created_by: userId,
-                  last_edited_by: userId
-                });
+                  userId: userId
+                })
+              });
+              
+              if (response.ok) {
+                const data = await response.json();
+                if (data.success && data.document) {
+                  setCurrentDocumentId(data.document.id);
+                }
               } else {
-                console.error("Persist doc error:", error);
+                console.error('Failed to create document via API');
               }
             }
 
@@ -424,7 +493,7 @@ export function CollaborativeCodeInterface({
         }
       });
     },
-    [initialCode, roomId, selectedLanguage, userId, username]
+    [initialCode, roomId, selectedLanguage, userId, username, currentDocumentId]
   );
 
   // Change language: update Monaco + persist language column
@@ -433,12 +502,23 @@ export function CollaborativeCodeInterface({
     if (editorRef.current && monacoRef.current) {
       monacoRef.current.editor.setModelLanguage(editorRef.current.getModel()!, language);
     }
+    
+    // Persist language change via API
     try {
-      await supabase
-        .from(DOCUMENT_TABLE)
-        .update({ language })
-        .eq("room_id", roomId)
-        .eq("document_name", DOCUMENT_NAME);
+      if (currentDocumentId) {
+        const response = await fetch(`/api/chat/rooms/${roomId}/documents/${currentDocumentId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            language,
+            userId: userId
+          })
+        });
+        
+        if (!response.ok) {
+          console.error('Failed to update document language via API');
+        }
+      }
     } catch (e) {
       console.error("Failed to persist language:", e);
     }
