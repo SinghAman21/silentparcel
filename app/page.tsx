@@ -428,7 +428,7 @@ export default function Home() {
 									Upload file
 								</Button>
 							</Link>
-							<Link href="/">
+							<Link href="/rooms/create">
 								<Button
 									size={"lg"}
 									className=" bg-muted hover:bg-muted/80 text-foreground rounded-lg font-medium border border-border transition-all duration-200 hover:scale-[1.02]"

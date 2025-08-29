@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
+import * as crypto from 'crypto';
 
 export async function POST(request: NextRequest) {
   try {
-    const { roomId, username } = await request.json();
+    const { roomId, username, userId } = await request.json();
 
     if (!roomId || !username) {
       return NextResponse.json(
@@ -11,6 +12,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // Use provided userId or generate one
+    const participantUserId = userId || crypto.randomUUID();
 
     // Verify room exists and is active
     const { data: room, error: roomError } = await supabaseAdmin
@@ -71,7 +75,8 @@ export async function POST(request: NextRequest) {
           username: updatedParticipant.username,
           joinedAt: updatedParticipant.joined_at,
           lastSeen: updatedParticipant.last_seen,
-          isOnline: updatedParticipant.is_online
+          isOnline: updatedParticipant.is_online,
+          userId: updatedParticipant.user_id
         }
       });
     }
@@ -82,7 +87,7 @@ export async function POST(request: NextRequest) {
       .insert({
         room_id: roomId,
         username: username,
-        user_id: `user_${Math.random().toString(36).substring(2, 8)}`
+        user_id: participantUserId
       })
       .select()
       .single();
@@ -103,7 +108,8 @@ export async function POST(request: NextRequest) {
         username: newParticipant.username,
         joinedAt: newParticipant.joined_at,
         lastSeen: newParticipant.last_seen,
-        isOnline: newParticipant.is_online
+        isOnline: newParticipant.is_online,
+        userId: newParticipant.user_id
       }
     });
 
@@ -166,7 +172,7 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const { roomId, username, isOnline } = await request.json();
+    const { roomId, username, userId, isOnline } = await request.json();
 
     if (!roomId || !username) {
       return NextResponse.json(
@@ -203,7 +209,8 @@ export async function PUT(request: NextRequest) {
         username: updatedParticipant.username,
         joinedAt: updatedParticipant.joined_at,
         lastSeen: updatedParticipant.last_seen,
-        isOnline: updatedParticipant.is_online
+        isOnline: updatedParticipant.is_online,
+        userId: updatedParticipant.user_id
       }
     });
 

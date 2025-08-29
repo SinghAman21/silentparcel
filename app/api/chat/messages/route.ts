@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
+import * as crypto from 'crypto';
 
 export async function POST(request: NextRequest) {
   try {
-    const { roomId, username, message, messageType = 'text' } = await request.json();
+    const { roomId, username, userId, message, messageType = 'text' } = await request.json();
 
     if (!roomId || !username || !message) {
       return NextResponse.json(
@@ -11,6 +12,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // Use provided userId or generate one
+    const messageUserId = userId || crypto.randomUUID();
 
     // Verify room exists and is active
     const { data: room, error: roomError } = await supabaseAdmin
@@ -43,7 +47,7 @@ export async function POST(request: NextRequest) {
         username: username,
         message: message,
         message_type: messageType,
-        user_id: `user_${Math.random().toString(36).substring(2, 8)}`
+        user_id: messageUserId
       })
       .select()
       .single();
@@ -64,7 +68,8 @@ export async function POST(request: NextRequest) {
         username: newMessage.username,
         message: newMessage.message,
         messageType: newMessage.message_type,
-        createdAt: newMessage.created_at
+        createdAt: newMessage.created_at,
+        userId: newMessage.user_id
       }
     });
 
@@ -114,7 +119,8 @@ export async function GET(request: NextRequest) {
         username: msg.username,
         message: msg.message,
         messageType: msg.message_type,
-        createdAt: msg.created_at
+        createdAt: msg.created_at,
+        userId: msg.user_id
       }))
     });
 

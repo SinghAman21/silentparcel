@@ -22,9 +22,9 @@ export function LeaveRoomDialog({ isOpen, onConfirm, onCancel, roomId }: LeaveRo
             Leave Secret Room?
           </AlertDialogTitle>
           <AlertDialogDescription className="space-y-3">
-            <p>
+            <div>
               You are about to leave room <span className="font-mono font-semibold">#{roomId}</span>.
-            </p>
+            </div>
             <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
               <p className="text-sm font-medium text-destructive mb-1">⚠️ Important Warning:</p>
               <ul className="text-sm text-muted-foreground space-y-1">
