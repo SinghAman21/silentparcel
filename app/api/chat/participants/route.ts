@@ -157,7 +157,8 @@ export async function GET(request: NextRequest) {
         username: participant.username,
         joinedAt: participant.joined_at,
         lastSeen: participant.last_seen,
-        isOnline: participant.is_online
+        isOnline: participant.is_online,
+        userId: participant.user_id
       }))
     });
 

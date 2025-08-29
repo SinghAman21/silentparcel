@@ -6,7 +6,7 @@ const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import type { editor as MonacoEditorTypes } from "monaco-editor";
 
-import { Send, Users, Clock, LogOut, Settings, Download, Code, MessageSquare } from "lucide-react";
+import { Send, Users, Clock, LogOut, Settings, Download, Code, MessageSquare, AlertCircle, GripVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -60,6 +60,7 @@ export function CollaborativeCodeInterface({
   const [timeLeft, setTimeLeft] = useState(3600);
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState("javascript");
   const [showSettings, setShowSettings] = useState(false);
   const [autoSave, setAutoSave] = useState(true);
@@ -70,6 +71,12 @@ export function CollaborativeCodeInterface({
   const [lastEditedAt, setLastEditedAt] = useState<string>("-");
   const [lastEditedBy, setLastEditedBy] = useState<string | null>(null);
   const [currentDocumentId, setCurrentDocumentId] = useState<string | null>(null);
+
+  // Resizer state for chat panel
+  const [chatPanelWidth, setChatPanelWidth] = useState(320); // Default 320px (80 * 4)
+  const [isResizing, setIsResizing] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [startWidth, setStartWidth] = useState(0);
 
   // Supabase auth user
   const [userId, setUserId] = useState<string | null>(null);
@@ -95,9 +102,11 @@ export function CollaborativeCodeInterface({
     messages,
     participants,
     isConnected: chatConnected,
+    error: chatError,
     sendMessage,
     joinRoom,
-    updateParticipantStatus
+    updateParticipantStatus,
+    clearError
   } = useSupabaseChat(roomId);
 
   // Get auth user once
@@ -563,6 +572,26 @@ export function CollaborativeCodeInterface({
 
   const handleLeaveRoom = () => setShowLeaveDialog(true);
 
+  const handleSendMessage = async () => {
+    if (!message.trim() || !chatConnected || isSendingMessage) return;
+    
+    setIsSendingMessage(true);
+    try {
+      await sendMessage(message.trim(), username);
+      setMessage(""); // Clear the input after sending
+      clearError();
+    } catch (error) {
+      console.error("Failed to send message:", error);
+      toast({
+        title: "Error",
+        description: "Failed to send message. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSendingMessage(false);
+    }
+  };
+
   const confirmLeaveRoom = async () => {
     try {
       await updateParticipantStatus(username, false);
@@ -610,6 +639,43 @@ export function CollaborativeCodeInterface({
     URL.revokeObjectURL(url);
   };
 
+  // Resizer handlers
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    setStartX(e.clientX);
+    setStartWidth(chatPanelWidth);
+  };
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isResizing) return;
+    
+    const deltaX = startX - e.clientX; // Negative delta expands chat panel
+    const newWidth = Math.max(250, Math.min(600, startWidth + deltaX)); // Min 250px, Max 600px
+    setChatPanelWidth(newWidth);
+  }, [isResizing, startX, startWidth]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsResizing(false);
+  }, []);
+
+  // Add global mouse events for resizing
+  useEffect(() => {
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'ew-resize';
+      document.body.style.userSelect = 'none';
+      
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      };
+    }
+  }, [isResizing, handleMouseMove, handleMouseUp]);
+
   // Username dialog
   if (showUsernameDialog) {
     return (
@@ -636,22 +702,6 @@ export function CollaborativeCodeInterface({
     );
   }
 
-  const handleSendMessage = () => {
-    if (!message.trim() || !chatConnected) return;
-    
-    try {
-      sendMessage(message.trim(), username);
-      setMessage(""); // Clear the input after sending
-    } catch (error) {
-      console.error("Failed to send message:", error);
-      toast({
-        title: "Error",
-        description: "Failed to send message",
-        variant: "destructive"
-      });
-    }
-  };
-
   return (
     <div className="h-screen flex flex-col bg-background">
       {/* Remote cursor styles injected globally */}
@@ -670,6 +720,36 @@ export function CollaborativeCodeInterface({
           padding: 0 3px;
           margin-left: 2px;
           font-size: 10px;
+        }
+        /* Resizer styles */
+        .resizer {
+          transition: background-color 0.2s ease;
+        }
+        .resizer:hover {
+          background-color: hsl(var(--primary) / 0.2) !important;
+        }
+        .resizer.resizing {
+          background-color: hsl(var(--primary) / 0.3) !important;
+        }
+        /* Prevent text selection during resize */
+        .resizing * {
+          user-select: none !important;
+        }
+        /* Message text handling */
+        .message-content {
+          word-wrap: break-word;
+          overflow-wrap: break-word;
+          word-break: break-word;
+          hyphens: auto;
+          white-space: pre-wrap;
+          line-height: 1.5;
+          max-width: 100%;
+        }
+        /* Handle URLs and long strings */
+        .message-content a,
+        .message-content code {
+          word-break: break-all;
+          overflow-wrap: break-word;
         }
       `}</style>
 
@@ -800,8 +880,22 @@ export function CollaborativeCodeInterface({
           </div>
         </div>
 
+        {/* Resizer Handle */}
+        <div 
+          className={`w-1 bg-border/40 hover:bg-border cursor-ew-resize flex items-center justify-center transition-colors resizer ${
+            isResizing ? 'resizing bg-primary/30' : ''
+          }`}
+          onMouseDown={handleMouseDown}
+          title="Drag to resize chat panel"
+        >
+          <GripVertical className="h-4 w-4 text-muted-foreground/50 rotate-90" />
+        </div>
+
         {/* Chat Sidebar */}
-        <div className="w-80 border-l border-border/40 bg-muted/20 shrink-0 flex flex-col">
+        <div 
+          className="border-l border-border/40 bg-muted/20 shrink-0 flex flex-col"
+          style={{ width: `${chatPanelWidth}px` }}
+        >
           <div className="p-4 border-b border-border/40 shrink-0">
             <h3 className="font-semibold flex items-center">
               <MessageSquare className="h-4 w-4 mr-2" />
@@ -813,23 +907,50 @@ export function CollaborativeCodeInterface({
             </h3>
           </div>
           
+          {/* Chat Error Display */}
+          {chatError && (
+            <div className="p-3 mx-4 bg-destructive/10 border border-destructive/20 rounded-lg">
+              <div className="flex items-center space-x-2 text-destructive">
+                <span className="text-xs font-medium">{chatError.message}</span>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={clearError}
+                  className="ml-auto h-4 w-4 p-0 text-destructive hover:text-destructive"
+                >
+                  ×
+                </Button>
+              </div>
+            </div>
+          )}
+          
           {/* Chat Messages */}
           <ScrollArea className="flex-1 p-4">
-            <div className="space-y-4 max-w-full">
+            <div className="space-y-4">
               {messages.map((msg) => (
-                <div key={msg.id} className="flex items-start space-x-3 max-w-full">
-                  <Avatar className="w-8 h-8 shrink-0">
+                <div key={msg.id} className="flex items-start space-x-3 w-full">
+                  <Avatar className="w-8 h-8 shrink-0 mt-0.5">
                     <AvatarFallback className="text-xs" style={{ backgroundColor: getParticipantColor(msg.username) + "20" }}>
                       {getParticipantAvatar(msg.username)}
                     </AvatarFallback>
                   </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <div className="max-w-full">
-                      <div className="flex items-center space-x-2 mb-1 flex-wrap">
-                        <span className="font-semibold text-sm truncate" style={{ color: getParticipantColor(msg.username) }}>{msg.username}</span>
-                        <span className="text-xs text-muted-foreground shrink-0">{new Date(msg.createdAt).toLocaleTimeString()}</span>
+                  <div className="flex-1 min-w-0 flex flex-col">
+                    <div className="flex items-baseline space-x-2 mb-1 min-w-0">
+                      <span 
+                        className="font-semibold text-sm max-w-[60%] truncate" 
+                        style={{ color: getParticipantColor(msg.username) }}
+                        title={msg.username}
+                      >
+                        {msg.username}
+                      </span>
+                      <span className="text-xs text-muted-foreground flex-shrink-0 ml-auto">
+                        {new Date(msg.createdAt).toLocaleTimeString()}
+                      </span>
+                    </div>
+                    <div className="bg-muted/50 rounded-lg px-3 py-2 text-sm word-wrap break-all hyphens-auto">
+                      <div className="message-content">
+                        {msg.message}
                       </div>
-                      <div className="bg-muted/50 rounded-lg px-3 py-2 max-w-full break-words text-sm">{msg.message}</div>
                     </div>
                   </div>
                 </div>
@@ -844,11 +965,16 @@ export function CollaborativeCodeInterface({
                 placeholder="Type a message..."
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
-                className="flex-1 bg-background/50"
-                disabled={!chatConnected}
+                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSendMessage()}
+                className="flex-1 bg-background/50 min-w-0"
+                disabled={!chatConnected || isSendingMessage}
               />
-              <Button onClick={handleSendMessage} disabled={!message.trim() || !chatConnected}>
+              <Button 
+                onClick={handleSendMessage} 
+                disabled={!message.trim() || !chatConnected || isSendingMessage}
+                className="shrink-0"
+                size="sm"
+              >
                 <Send className="h-4 w-4" />
               </Button>
             </div>

@@ -50,7 +50,7 @@ export interface ChatState {
 }
 
 export interface ChatActions {
-  sendMessage: (username: string, message: string, messageType?: 'text' | 'system' | 'file') => Promise<ChatMessage>;
+  sendMessage: (message: string, username: string, messageType?: 'text' | 'system' | 'file') => Promise<ChatMessage>;
   joinRoom: (username: string) => Promise<ChatParticipant>;
   updateParticipantStatus: (username: string, isOnline: boolean) => Promise<ChatParticipant>;
   fetchMessages: (limit?: number) => Promise<void>;
@@ -162,8 +162,15 @@ export const useSupabaseChat = (roomId: string): ChatState & ChatActions => {
     lastMessageId: null,
   });
 
-  // Auth user state (NEW: store authenticated user info)
-  const [authUser, setAuthUser] = useState<any | null>(null);
+  // Simple user ID for anonymous users (no authentication needed)
+  const [userId] = useState<string>(() => {
+    // Generate UUID v4 compatible with browser environment
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  });
 
   // Refs
   const channelRef = useRef<RealtimeChannel | null>(null);
@@ -197,46 +204,6 @@ export const useSupabaseChat = (roomId: string): ChatState & ChatActions => {
   const clearError = useCallback(() => {
     setError(null);
   }, [setError]);
-
-  // Fetch authenticated user once (NEW)
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        // Try to get existing user
-        const { data } = await supabase.auth.getUser();
-        if (data.user && mounted) {
-          setAuthUser(data.user);
-          return;
-        }
-        
-        // Create anonymous user session if no user exists
-        const { data: anonData, error } = await supabase.auth.signInAnonymously();
-        if (anonData.user && mounted) {
-          setAuthUser(anonData.user);
-        } else if (error) {
-          console.warn('Failed to create anonymous user:', error);
-          // Fallback: create a temporary user object
-          if (mounted) {
-            setAuthUser({
-              id: crypto.randomUUID(),
-              isAnonymous: true
-            });
-          }
-        }
-      } catch (err) {
-        console.warn('Failed to fetch auth user', err);
-        // Fallback: create a temporary user object
-        if (mounted) {
-          setAuthUser({
-            id: crypto.randomUUID(),
-            isAnonymous: true
-          });
-        }
-      }
-    })();
-    return () => { mounted = false; };
-  }, []);
 
   // Fetch messages with error handling
   const fetchMessages = useCallback(async (limit = MESSAGE_LIMIT) => {
@@ -283,24 +250,24 @@ export const useSupabaseChat = (roomId: string): ChatState & ChatActions => {
 
   // Send message with error handling
   const sendMessage = useCallback(async (
-    username: string,
     message: string,
+    username: string,
     messageType: 'text' | 'system' | 'file' = 'text'
   ): Promise<ChatMessage> => {
     if (!roomIdRef) {
       throw new Error('Room ID is required');
     }
 
-    if (!authUser?.id) {
-      const errMsg = 'User not authenticated';
-      setError(createError('NOT_AUTHENTICATED', errMsg));
+    if (!username?.trim()) {
+      const errMsg = 'Username is required';
+      setError(createError('USERNAME_REQUIRED', errMsg));
       throw new Error(errMsg);
     }
 
     try {
       setError(null);
 
-      const { message: newMessage } = await ChatAPIClient.sendMessage(roomIdRef, username, authUser.id, message, messageType);
+      const { message: newMessage } = await ChatAPIClient.sendMessage(roomIdRef, username, userId, message, messageType);
 
       return newMessage;
     } catch (error) {
@@ -309,24 +276,24 @@ export const useSupabaseChat = (roomId: string): ChatState & ChatActions => {
       setError(chatError);
       throw error;
     }
-  }, [roomIdRef, setError, authUser]);
+  }, [roomIdRef, setError, userId]);
 
-  // Join room with error handling (FIXED: pass userId UUID)
+  // Join room with error handling
   const joinRoom = useCallback(async (username: string): Promise<ChatParticipant> => {
     if (!roomIdRef) {
       throw new Error('Room ID is required');
     }
 
-    if (!authUser?.id) {
-      const errMsg = 'User not authenticated';
-      setError(createError('NOT_AUTHENTICATED', errMsg));
+    if (!username?.trim()) {
+      const errMsg = 'Username is required';
+      setError(createError('USERNAME_REQUIRED', errMsg));
       throw new Error(errMsg);
     }
 
     try {
       setError(null);
 
-      const { participant } = await ChatAPIClient.joinRoom(roomIdRef, username, authUser.id);
+      const { participant } = await ChatAPIClient.joinRoom(roomIdRef, username, userId);
 
       return participant;
     } catch (error) {
@@ -335,28 +302,28 @@ export const useSupabaseChat = (roomId: string): ChatState & ChatActions => {
       setError(chatError);
       throw error;
     }
-  }, [roomIdRef, setError, authUser]);
+  }, [roomIdRef, setError, userId]);
 
-  // Update participant status with debouncing (FIXED: pass userId UUID)
+  // Update participant status with debouncing
   const updateParticipantStatus = useCallback(async (username: string, isOnline: boolean): Promise<ChatParticipant> => {
     if (!roomIdRef) {
       throw new Error('Room ID is required');
     }
 
-    if (!authUser?.id) {
-      const errMsg = 'User not authenticated';
-      setError(createError('NOT_AUTHENTICATED', errMsg));
+    if (!username?.trim()) {
+      const errMsg = 'Username is required';
+      setError(createError('USERNAME_REQUIRED', errMsg));
       throw new Error(errMsg);
     }
 
     try {
-      const { participant } = await ChatAPIClient.updateParticipantStatus(roomIdRef, username, authUser.id, isOnline);
+      const { participant } = await ChatAPIClient.updateParticipantStatus(roomIdRef, username, userId, isOnline);
       return participant;
     } catch (error) {
       console.error('Error updating participant status:', error);
       throw error;
     }
-  }, [roomIdRef, authUser, setError]);
+  }, [roomIdRef, userId, setError]);
 
   // Reconnect function
   const reconnect = useCallback(async () => {
@@ -544,38 +511,26 @@ export const useSupabaseChat = (roomId: string): ChatState & ChatActions => {
     const handleVisibilityChange = () => {
       if (!roomIdRef) return;
 
-      if (document.visibilityState === 'visible') {
-        // User came back to the page
-        // NOTE: we cannot infer username here; caller should call updateParticipantStatus with proper username
-        updateParticipantStatus('current_user', true).catch(() => {});
-      } else {
-        // User left the page
-        updateParticipantStatus('current_user', false).catch(() => {});
-      }
-    };
-    // Note: We can't reliably determine username here
+      // Note: We cannot reliably determine username here
       // This functionality should be handled by the component using this hook
       console.log('Visibility changed:', document.visibilityState);
+    };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [roomIdRef, updateParticipantStatus]);
+  }, [roomIdRef]);
 
   // Handle window focus/blur
   useEffect(() => {
     const handleFocus = () => {
-      if (roomIdRef) {
-        updateParticipantStatus('current_user', true).catch(() => {});
-      }
+      console.log('Window focused');
     };
 
     const handleBlur = () => {
-      if (roomIdRef) {
-        updateParticipantStatus('current_user', false).catch(() => {});
-      }
+      console.log('Window blurred');
     };
 
     window.addEventListener('focus', handleFocus);
@@ -585,7 +540,7 @@ export const useSupabaseChat = (roomId: string): ChatState & ChatActions => {
       window.removeEventListener('focus', handleFocus);
       window.removeEventListener('blur', handleBlur);
     };
-  }, [roomIdRef, updateParticipantStatus]);
+  }, [roomIdRef]);
 
   return {
     ...state,

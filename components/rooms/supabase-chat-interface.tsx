@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Send, Paperclip, Users, Crown, Shield, Clock, LogOut, MoreVertical, Wifi, WifiOff } from 'lucide-react';
+import { Send, Paperclip, Users, Crown, Shield, Clock, LogOut, MoreVertical, Wifi, WifiOff, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import ThemeToggle from '@/components/theme-toggle';
 import { LeaveRoomDialog } from '@/components/rooms/leave-room-dialog';
 import { useSupabaseChat, ChatMessage, ChatParticipant } from '@/hooks/use-supabase-chat';
+import { useToast } from '@/hooks/use-toast';
 
 interface SupabaseChatInterfaceProps {
   roomId: string;
@@ -28,15 +29,19 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave 
   const [timeLeft, setTimeLeft] = useState(3600); // 1 hour in seconds
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
+  const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
 
   const {
     messages,
     participants,
     isConnected,
+    error,
     sendMessage,
     joinRoom,
-    updateParticipantStatus
+    updateParticipantStatus,
+    clearError
   } = useSupabaseChat(roomId);
 
   // Set username on mount
@@ -70,7 +75,11 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave 
         })
         .catch((error) => {
           console.error('Failed to join room:', error);
-          // You might want to show an error message here
+          toast({
+            title: "Error",
+            description: "Failed to join room. Please try again.",
+            variant: "destructive"
+          });
         })
         .finally(() => {
           setIsJoining(false);
@@ -99,14 +108,22 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave 
   };
 
   const handleSendMessage = async () => {
-    if (!message.trim() || !username) return;
+    if (!message.trim() || !username || isSending) return;
 
+    setIsSending(true);
     try {
-      await sendMessage(username, message, 'text');
+      await sendMessage(message, username, 'text');
       setMessage('');
+      clearError();
     } catch (error) {
       console.error('Failed to send message:', error);
-      // You might want to show an error message here
+      toast({
+        title: "Error",
+        description: "Failed to send message. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -220,6 +237,24 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave 
       <div className="flex-1 flex overflow-hidden min-h-0">
         {/* Chat Area */}
         <div className="flex-1 flex flex-col min-w-0">
+          {/* Error Display */}
+          {error && (
+            <div className="p-3 mx-4 mb-4 bg-destructive/10 border border-destructive/20 rounded-lg">
+              <div className="flex items-center space-x-2 text-destructive">
+                <AlertCircle className="h-4 w-4" />
+                <span className="text-sm font-medium">{error.message}</span>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={clearError}
+                  className="ml-auto h-6 w-6 p-0 text-destructive hover:text-destructive"
+                >
+                  ×
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Messages */}
           <ScrollArea className="flex-1 p-4">
             <div className="space-y-4 max-w-full">
@@ -268,13 +303,13 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave 
                 placeholder="Type a message..."
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
                 className="flex-1 bg-background/50"
-                disabled={!isConnected}
+                disabled={!isConnected || isSending}
               />
               <Button 
                 onClick={handleSendMessage} 
-                disabled={!message.trim() || !isConnected}
+                disabled={!message.trim() || !isConnected || isSending}
                 className="hover:scale-105 transition-transform shrink-0"
               >
                 <Send className="h-4 w-4" />
