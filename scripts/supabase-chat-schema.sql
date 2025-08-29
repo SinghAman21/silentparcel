@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS chat_rooms (
   expires_at TIMESTAMP WITH TIME ZONE,
   is_active BOOLEAN DEFAULT TRUE,
   created_by VARCHAR(255),
-  room_type VARCHAR(20) DEFAULT 'chat' CHECK (room_type IN ('chat', 'code', 'mixed'))
+  room_type VARCHAR(20) DEFAULT 'chat' CHECK (room_type IN ('chat', 'code'))
 );
 
 -- Create chat_messages table with foreign key reference

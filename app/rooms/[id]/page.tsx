@@ -210,7 +210,7 @@ export default function ChatRoomPage() {
 						<CardHeader>
 							<CardTitle className="flex items-center">
 								<Shield className="h-5 w-5 mr-2" />
-								Join {roomInfo?.roomType === 'code' ? 'Code' : roomInfo?.roomType === 'mixed' ? 'Mixed' : 'Chat'} Room
+								Join {roomInfo?.roomType === 'code' ? 'Code' : 'Chat'} Room
 							</CardTitle>
 						</CardHeader>
 						<CardContent className="space-y-4">
@@ -248,7 +248,7 @@ export default function ChatRoomPage() {
 										Joining...
 									</>
 								) : (
-									`Join ${roomInfo?.roomType === 'code' ? 'Code' : roomInfo?.roomType === 'mixed' ? 'Mixed' : 'Chat'} Room`
+									`Join ${roomInfo?.roomType === 'code' ? 'Code' : 'Chat'} Room`
 								)}
 							</Button>
 						</CardContent>
@@ -260,7 +260,7 @@ export default function ChatRoomPage() {
 
 	// Render appropriate interface based on room type
 	const renderInterface = () => {
-		if (roomInfo?.roomType === 'code' || roomInfo?.roomType === 'mixed') {
+		if (roomInfo?.roomType === 'code') {
 			return (
 				<CollaborativeCodeInterface
 					roomId={roomId}

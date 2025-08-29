@@ -6,14 +6,13 @@ const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import type { editor as MonacoEditorTypes } from "monaco-editor";
 
-import { Send, Users, Clock, LogOut, Settings, Download } from "lucide-react";
+import { Send, Users, Clock, LogOut, Settings, Download, Code, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -22,6 +21,7 @@ import { LeaveRoomDialog } from "@/components/rooms/leave-room-dialog";
 import { useSupabaseChat } from "@/hooks/use-supabase-chat";
 import { useToast } from "@/hooks/use-toast";
 
+import { CompactUserDisplay } from "@/components/rooms/compact-user-display";
 import { supabase } from "@/lib/supabase";
 
 interface CollaborativeCodeInterfaceProps {
@@ -60,7 +60,6 @@ export function CollaborativeCodeInterface({
   const [timeLeft, setTimeLeft] = useState(3600);
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
-  const [activeTab, setActiveTab] = useState("code");
   const [selectedLanguage, setSelectedLanguage] = useState("javascript");
   const [showSettings, setShowSettings] = useState(false);
   const [autoSave, setAutoSave] = useState(true);
@@ -677,7 +676,7 @@ export function CollaborativeCodeInterface({
       {/* Header */}
       <div className="border-b border-border/40 p-4 bg-background/80 backdrop-blur-xs shrink-0">
         <div className="flex items-center justify-between">
-          <div>
+          <div className="flex-1">
             <h1 className="font-bold">Collaborative Code Room #{roomId}</h1>
             <div className="flex items-center gap-3 text-sm text-muted-foreground">
               <span className="inline-flex items-center gap-1">
@@ -697,152 +696,140 @@ export function CollaborativeCodeInterface({
               </span>
             </div>
           </div>
-          <div className="flex items-center space-x-2">
-            <Badge variant="secondary" className="flex items-center space-x-1">
-              <Users className="h-3 w-3" />
-              <span>{participants.length}/10</span>
-            </Badge>
-            <Button variant="outline" size="sm" onClick={() => setShowSettings(true)}>
-              <Settings className="h-4 w-4" />
-            </Button>
-            <ThemeToggle />
-            <Button variant="outline" size="sm" onClick={handleLeaveRoom}>
-              <LogOut className="h-4 w-4 mr-2" />
-              Leave Room
-            </Button>
+          
+          {/* Compact User Display for Collaborative Coding */}
+          <div className="flex items-center space-x-4">
+            <CompactUserDisplay 
+              participants={participants}
+              currentUsername={username}
+              maxVisibleAvatars={5}
+            />
+            
+            <div className="flex items-center space-x-2">
+              <Button variant="outline" size="sm" onClick={() => setShowSettings(true)}>
+                <Settings className="h-4 w-4" />
+              </Button>
+              <ThemeToggle />
+              <Button variant="outline" size="sm" onClick={handleLeaveRoom}>
+                <LogOut className="h-4 w-4 mr-2" />
+                Leave Room
+              </Button>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Body */}
       <div className="flex-1 flex overflow-hidden min-h-0">
+        {/* Main Code Editor Area */}
         <div className="flex-1 flex flex-col min-w-0">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-            <TabsContent value="code" className="flex-1 flex flex-col min-h-0">
-              {/* Toolbar */}
-              <div className="border-b border-border/40 p-2 bg-muted/20 flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <Label htmlFor="language-select" className="text-sm">Language:</Label>
-                  <Select value={selectedLanguage} onValueChange={handleLanguageChange}>
-                    <SelectTrigger id="language-select" className="w-36"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="javascript">JavaScript</SelectItem>
-                      <SelectItem value="typescript">TypeScript</SelectItem>
-                      <SelectItem value="python">Python</SelectItem>
-                      <SelectItem value="java">Java</SelectItem>
-                      <SelectItem value="cpp">C++</SelectItem>
-                      <SelectItem value="c">C</SelectItem>
-                      <SelectItem value="html">HTML</SelectItem>
-                      <SelectItem value="css">CSS</SelectItem>
-                      <SelectItem value="json">JSON</SelectItem>
-                      <SelectItem value="markdown">Markdown</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Button variant="outline" size="sm" onClick={handleDownloadCode}>
-                    <Download className="h-4 w-4 mr-2" />
-                    Download
-                  </Button>
-                </div>
-              </div>
-
-              {/* Monaco */}
-              <div className="flex-1 min-h-0">
-                <MonacoEditor
-                  height="100%"
-                  language={selectedLanguage}
-                  theme="vs-dark"
-                  options={{
-                    minimap: { enabled: true },
-                    fontSize: 14,
-                    wordWrap: "on",
-                    automaticLayout: true,
-                    scrollBeyondLastLine: false,
-                    renderWhitespace: "selection",
-                    cursorBlinking: "smooth",
-                    cursorSmoothCaretAnimation: "on",
-                    smoothScrolling: true,
-                    mouseWheelZoom: true,
-                    suggestOnTriggerCharacters: true,
-                    quickSuggestions: true,
-                    parameterHints: { enabled: true },
-                    autoIndent: "full",
-                    formatOnPaste: true,
-                    formatOnType: true
-                  }}
-                  onMount={handleEditorDidMount}
-                />
-              </div>
-            </TabsContent>
-
-            {/* Chat */}
-            <TabsContent value="chat" className="flex-1 flex flex-col min-h-0">
-              <ScrollArea className="flex-1 p-4">
-                <div className="space-y-4 max-w-full">
-                  {messages.map((msg) => (
-                    <div key={msg.id} className="flex items-start space-x-3 max-w-full">
-                      <Avatar className="w-8 h-8 shrink-0">
-                        <AvatarFallback className="text-xs" style={{ backgroundColor: getParticipantColor(msg.username) + "20" }}>
-                          {getParticipantAvatar(msg.username)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <div className="max-w-full">
-                          <div className="flex items-center space-x-2 mb-1 flex-wrap">
-                            <span className="font-semibold text-sm truncate" style={{ color: getParticipantColor(msg.username) }}>{msg.username}</span>
-                            <span className="text-xs text-muted-foreground shrink-0">{new Date(msg.createdAt).toLocaleTimeString()}</span>
-                          </div>
-                          <div className="bg-muted/50 rounded-lg px-3 py-2 max-w-full break-words">{msg.message}</div>
-                        </div>
+          {/* Toolbar */}
+          <div className="border-b border-border/40 p-2 bg-muted/20 flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Label htmlFor="language-select" className="text-sm">Language:</Label>
+              <Select value={selectedLanguage} onValueChange={handleLanguageChange}>
+                <SelectTrigger id="language-select" className="w-36"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="javascript">JavaScript</SelectItem>
+                  <SelectItem value="typescript">TypeScript</SelectItem>
+                  <SelectItem value="python">Python</SelectItem>
+                  <SelectItem value="java">Java</SelectItem>
+                  <SelectItem value="cpp">C++</SelectItem>
+                  <SelectItem value="c">C</SelectItem>
+                  <SelectItem value="html">HTML</SelectItem>
+                  <SelectItem value="css">CSS</SelectItem>
+                  <SelectItem value="json">JSON</SelectItem>
+                  <SelectItem value="markdown">Markdown</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center space-x-2">
+              {/* Active Cursors Display */}
+              {cursorPositions.length > 0 && (
+                <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                  <div className="flex items-center space-x-1">
+                    {cursorPositions.slice(0, 3).map((cursor, index) => (
+                      <div 
+                        key={index} 
+                        className="flex items-center space-x-1 bg-muted/50 rounded px-2 py-1"
+                      >
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: cursor.color }} />
+                        <span className="text-xs truncate max-w-16">{cursor.username}</span>
+                        <span className="text-xs text-muted-foreground">L{cursor.lineNumber}</span>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                    {cursorPositions.length > 3 && (
+                      <span className="text-xs text-muted-foreground">+{cursorPositions.length - 3} more</span>
+                    )}
+                  </div>
                 </div>
-              </ScrollArea>
+              )}
+              <Button variant="outline" size="sm" onClick={handleDownloadCode}>
+                <Download className="h-4 w-4 mr-2" />
+                Download
+              </Button>
+            </div>
+          </div>
 
-              <div className="border-t border-border/40 p-4 bg-background/50 shrink-0">
-                <div className="flex space-x-2">
-                  <Input
-                    placeholder="Type a message..."
-                    value={message}
-                    onChange={(e) => setMessage(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
-                    className="flex-1 bg-background/50"
-                    disabled={!chatConnected}
-                  />
-                  <Button onClick={handleSendMessage} disabled={!message.trim() || !chatConnected}>
-                    <Send className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </TabsContent>
-          </Tabs>
+          {/* Monaco Editor */}
+          <div className="flex-1 min-h-0">
+            <MonacoEditor
+              height="100%"
+              language={selectedLanguage}
+              theme="vs-dark"
+              options={{
+                minimap: { enabled: true },
+                fontSize: 14,
+                wordWrap: "on",
+                automaticLayout: true,
+                scrollBeyondLastLine: false,
+                renderWhitespace: "selection",
+                cursorBlinking: "smooth",
+                cursorSmoothCaretAnimation: "on",
+                smoothScrolling: true,
+                mouseWheelZoom: true,
+                suggestOnTriggerCharacters: true,
+                quickSuggestions: true,
+                parameterHints: { enabled: true },
+                autoIndent: "full",
+                formatOnPaste: true,
+                formatOnType: true
+              }}
+              onMount={handleEditorDidMount}
+            />
+          </div>
         </div>
 
-        {/* Sidebar: Users + Cursors */}
-        <div className="w-72 border-l border-border/40 bg-muted/20 shrink-0 hidden md:flex flex-col">
+        {/* Chat Sidebar */}
+        <div className="w-80 border-l border-border/40 bg-muted/20 shrink-0 flex flex-col">
           <div className="p-4 border-b border-border/40 shrink-0">
-            <h3 className="font-semibold flex items-center"><Users className="h-4 w-4 mr-2" />Users ({participants.length})</h3>
+            <h3 className="font-semibold flex items-center">
+              <MessageSquare className="h-4 w-4 mr-2" />
+              Chat {messages.length > 0 && (
+                <span className="ml-2 bg-primary/20 text-primary text-xs px-1.5 py-0.5 rounded-full">
+                  {messages.length}
+                </span>
+              )}
+            </h3>
           </div>
-          <ScrollArea className="flex-1">
-            <div className="p-2 space-y-1">
-              {participants.map((participant) => (
-                <div key={participant.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50 transition-colors">
-                  <div className="flex items-center space-x-3 min-w-0 flex-1">
-                    <Avatar className="w-8 h-8 shrink-0">
-                      <AvatarFallback className="text-xs" style={{ backgroundColor: getParticipantColor(participant.username) + "20" }}>
-                        {getParticipantAvatar(participant.username)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center space-x-1">
-                        <span className="font-medium text-sm truncate" style={{ color: getParticipantColor(participant.username) }}>
-                          {participant.username}
-                        </span>
-                        <div className={`w-2 h-2 rounded-full ${participant.isOnline ? "bg-green-500" : "bg-gray-400"}`} />
+          
+          {/* Chat Messages */}
+          <ScrollArea className="flex-1 p-4">
+            <div className="space-y-4 max-w-full">
+              {messages.map((msg) => (
+                <div key={msg.id} className="flex items-start space-x-3 max-w-full">
+                  <Avatar className="w-8 h-8 shrink-0">
+                    <AvatarFallback className="text-xs" style={{ backgroundColor: getParticipantColor(msg.username) + "20" }}>
+                      {getParticipantAvatar(msg.username)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <div className="max-w-full">
+                      <div className="flex items-center space-x-2 mb-1 flex-wrap">
+                        <span className="font-semibold text-sm truncate" style={{ color: getParticipantColor(msg.username) }}>{msg.username}</span>
+                        <span className="text-xs text-muted-foreground shrink-0">{new Date(msg.createdAt).toLocaleTimeString()}</span>
                       </div>
-                      {participant.username === username && <span className="text-xs text-muted-foreground">You</span>}
+                      <div className="bg-muted/50 rounded-lg px-3 py-2 max-w-full break-words text-sm">{msg.message}</div>
                     </div>
                   </div>
                 </div>
@@ -850,26 +837,20 @@ export function CollaborativeCodeInterface({
             </div>
           </ScrollArea>
 
-          {/* Active cursors + last editor info */}
-          <div className="p-4 border-t border-border/40 shrink-0">
-            <h4 className="font-semibold text-sm mb-2">Active Cursors</h4>
-            {cursorPositions.length === 0 ? (
-              <div className="text-xs text-muted-foreground">No remote cursors</div>
-            ) : (
-              <div className="space-y-1">
-                {cursorPositions.map((cursor, index) => (
-                  <div key={index} className="flex items-center space-x-2 text-xs">
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: cursor.color }} />
-                    <span className="truncate">{cursor.username}</span>
-                    <span className="text-muted-foreground">L{cursor.lineNumber}:{cursor.column}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="mt-3 text-xs text-muted-foreground">
-              <div>Last edited by <span className="font-medium">{lastEditorName}</span></div>
-              <div>at {lastEditedAt}</div>
+          {/* Chat Input */}
+          <div className="border-t border-border/40 p-4 bg-background/50 shrink-0">
+            <div className="flex space-x-2">
+              <Input
+                placeholder="Type a message..."
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
+                className="flex-1 bg-background/50"
+                disabled={!chatConnected}
+              />
+              <Button onClick={handleSendMessage} disabled={!message.trim() || !chatConnected}>
+                <Send className="h-4 w-4" />
+              </Button>
             </div>
           </div>
         </div>

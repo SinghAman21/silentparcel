@@ -23,10 +23,10 @@ export async function POST(request: NextRequest) {
     const { roomName, expiryTime, roomType = 'chat' } = await request.json();
 
     // Validate room type
-    const validRoomTypes = ['chat', 'code', 'mixed'];
+    const validRoomTypes = ['chat', 'code'];
     if (!validRoomTypes.includes(roomType)) {
       return NextResponse.json(
-        { error: 'Invalid room type. Must be one of: chat, code, mixed' },
+        { error: 'Invalid room type. Must be one of: chat, code' },
         { status: 400 }
       );
     }

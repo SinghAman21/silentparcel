@@ -183,11 +183,9 @@ export default function CreateRoomPage() {
   const getRoomTypeDescription = () => {
     switch (roomType) {
       case 'chat':
-        return 'Traditional chat room with text messages';
+        return 'Anonymous chat room for secure conversations';
       case 'code':
-        return 'Collaborative code editor with real-time cursor tracking';
-      case 'mixed':
-        return 'Combined chat and code editor in one room';
+        return 'Collaborative coding environment with real-time editing and chat';
       default:
         return '';
     }
@@ -199,8 +197,6 @@ export default function CreateRoomPage() {
         return <MessageSquare className="h-5 w-5" />;
       case 'code':
         return <Code className="h-5 w-5" />;
-      case 'mixed':
-        return <Users className="h-5 w-5" />;
       default:
         return <MessageSquare className="h-5 w-5" />;
     }
@@ -261,19 +257,13 @@ export default function CreateRoomPage() {
                       <SelectItem value="chat">
                         <div className="flex items-center space-x-2">
                           <MessageSquare className="h-4 w-4" />
-                          <span>Chat Room</span>
+                          <span>Chatting</span>
                         </div>
                       </SelectItem>
                       <SelectItem value="code">
                         <div className="flex items-center space-x-2">
                           <Code className="h-4 w-4" />
-                          <span>Code Editor</span>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="mixed">
-                        <div className="flex items-center space-x-2">
-                          <Users className="h-4 w-4" />
-                          <span>Mixed (Chat + Code)</span>
+                          <span>Collab Coding</span>
                         </div>
                       </SelectItem>
                     </SelectContent>
@@ -334,7 +324,7 @@ export default function CreateRoomPage() {
                     <p className="font-medium text-sm">Privacy Features</p>
                     <p className="text-xs text-muted-foreground">
                       Auto-generated password • Anonymous usernames • No message history
-                      {roomType !== 'chat' && ' • Real-time cursor tracking'}
+                      {roomType === 'code' && ' • Real-time collaborative editing'}
                     </p>
                   </div>
                 </div>
@@ -344,7 +334,7 @@ export default function CreateRoomPage() {
                   className="w-full hover:scale-105 transition-transform"
                   disabled={isCreating}
                 >
-                  {isCreating ? 'Creating...' : `Create ${roomType === 'code' ? 'Code' : roomType === 'mixed' ? 'Mixed' : 'Chat'} Room`}
+                  {isCreating ? 'Creating...' : `Create ${roomType === 'code' ? 'Collab Coding' : 'Chat'} Room`}
                 </Button>
               </CardContent>
             </Card>
@@ -356,7 +346,7 @@ export default function CreateRoomPage() {
             <div className="text-center">
               <h1 className="text-2xl font-bold mb-2">Room Created! 🎉</h1>
               <p className="text-muted-foreground">
-                Your {roomType === 'code' ? 'collaborative code room' : roomType === 'mixed' ? 'mixed chat and code room' : 'anonymous chat room'} is ready. Share the password with others to invite them.
+                Your {roomType === 'code' ? 'collaborative coding room' : 'anonymous chat room'} is ready. Share the password with others to invite them.
               </p>
             </div>
 
@@ -411,12 +401,7 @@ export default function CreateRoomPage() {
                   <span>Room expires in {expiryTime === '30m' ? '30 minutes' : expiryTime === '1h' ? '1 hour' : expiryTime === '2h' ? '2 hours' : expiryTime === '6h' ? '6 hours' : '24 hours'}</span>
                 </div>
 
-                {/* {roomType !== 'chat' && (
-                  <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                    <Code className="h-4 w-4" />
-                    <span>Default language: {defaultLanguage}</span>
-                  </div>
-                )} */}
+
               </CardContent>
             </Card>
 
