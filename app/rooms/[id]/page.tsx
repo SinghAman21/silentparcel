@@ -80,7 +80,7 @@ export default function ChatRoomPage({ searchParams }: { searchParams: Promise<{
 
 		try {
 			// Generate username if not provided (only when user actually joins)
-			let finalUsername = username.trim() || `User_${Math.random().toString(36).substr(2, 6)}`;
+			let finalUsername = username.trim() || `user_${Math.random().toString(36).substr(2, 6)}`;
 			let isGeneratedUsername = false;
 			
 			// First attempt to register with provided/generated username
@@ -102,7 +102,7 @@ export default function ChatRoomPage({ searchParams }: { searchParams: Promise<{
 				
 				if (conflictData.code === 'USERNAME_EXISTS') {
 					// Generate a random username to resolve conflict
-					finalUsername = `User_${Math.random().toString(36).substr(2, 6)}`;
+					finalUsername = `user_${Math.random().toString(36).substr(2, 6)}`;
 					isGeneratedUsername = true;
 					
 					// Try again with generated username
