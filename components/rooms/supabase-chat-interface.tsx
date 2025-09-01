@@ -37,7 +37,8 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave,
   const [message, setMessage] = useState('');
   const [username, setUsername] = useState('');
   const [showUsernameDialog, setShowUsernameDialog] = useState(true);
-  const [timeLeft, setTimeLeft] = useState(3600); // 1 hour in seconds
+  const [timeLeft, setTimeLeft] = useState(3600); // Will be updated with actual room expiry
+  const [roomExpiresAt, setRoomExpiresAt] = useState<string | null>(null);
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
   const [isSending, setIsSending] = useState(false);
@@ -267,13 +268,74 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave,
     }
   }, [username, joinRoom, isJoining, userData, roomId, toast, fetchParticipants]);
 
-  // Timer countdown
+  // FIXED: Fetch room info to get actual expiry time
   useEffect(() => {
+    const fetchRoomInfo = async () => {
+      try {
+        console.log(`Fetching room info for room: ${roomId}`);
+        const response = await fetch(`/api/chat/rooms/${roomId}`);
+        console.log('Room info response status:', response.status);
+        
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Room info data:', data);
+          
+          if (data.success && data.room.expiresAt) {
+            console.log('Setting room expiry time:', data.room.expiresAt);
+            setRoomExpiresAt(data.room.expiresAt);
+            
+            // Calculate initial time left
+            const expiryTime = new Date(data.room.expiresAt).getTime();
+            const now = Date.now();
+            const secondsLeft = Math.max(0, Math.floor((expiryTime - now) / 1000));
+            console.log('Initial seconds left:', secondsLeft);
+            setTimeLeft(secondsLeft);
+          } else {
+            console.warn('Room info response missing expiresAt:', data);
+          }
+        } else {
+          console.error('Failed to fetch room info, status:', response.status);
+        }
+      } catch (error) {
+        console.error('Error fetching room info:', error);
+      }
+    };
+    
+    if (roomId) {
+      fetchRoomInfo();
+    }
+  }, [roomId]);
+
+  // FIXED: Timer countdown with actual room expiry time
+  useEffect(() => {
+    if (!roomExpiresAt) return;
+    
     const timer = setInterval(() => {
-      setTimeLeft(prev => Math.max(0, prev - 1));
+      const expiryTime = new Date(roomExpiresAt).getTime();
+      const now = Date.now();
+      const secondsLeft = Math.max(0, Math.floor((expiryTime - now) / 1000));
+      
+      setTimeLeft(secondsLeft);
+      
+      // If time is up, show expiry message and redirect
+      if (secondsLeft === 0) {
+        toast({
+          title: "Room Expired",
+          description: "This room has expired and will be cleaned up.",
+          variant: "destructive"
+        });
+        
+        // Redirect after a short delay
+        setTimeout(() => {
+          onLeave();
+        }, 3000);
+        
+        clearInterval(timer);
+      }
     }, 1000);
+    
     return () => clearInterval(timer);
-  }, []);
+  }, [roomExpiresAt, toast, onLeave]);
 
   // Auto scroll to bottom
   useEffect(() => {

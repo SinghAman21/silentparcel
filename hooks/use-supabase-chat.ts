@@ -137,10 +137,49 @@ class ChatAPIClient {
   }
 
   static async joinRoom(roomId: string, username: string, userId: string): Promise<{ participant: ChatParticipant }> {
-    return this.makeRequest('/api/chat/participants', {
-      method: 'POST',
-      body: JSON.stringify({ roomId, username, userId }),
-    });
+    try {
+      const response = await fetch('/api/chat/participants', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ roomId, username, userId }),
+      });
+
+      // Handle username conflict (409) specially - BEFORE checking response.ok
+      if (response.status === 409) {
+        const conflictData = await response.json();
+        if (conflictData.code === 'USERNAME_EXISTS') {
+          // Generate a new username and retry
+          const newUsername = `User_${Math.random().toString(36).substr(2, 6)}`;
+          console.log(`Username conflict resolved: ${username} -> ${newUsername}`);
+          
+          // Retry with new username
+          return this.joinRoom(roomId, newUsername, userId);
+        }
+      }
+
+      // Only check response.ok for non-409 errors
+      if (!response.ok) {
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch {
+          errorData = { error: `HTTP ${response.status}: ${response.statusText}` };
+        }
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.error || 'API request failed');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error in joinRoom:', error);
+      throw error;
+    }
   }
 
   static async updateParticipantStatus(roomId: string, username: string, userId: string, isOnline: boolean): Promise<{ participant: ChatParticipant }> {

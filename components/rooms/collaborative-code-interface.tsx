@@ -59,7 +59,8 @@ export function CollaborativeCodeInterface({
   const [message, setMessage] = useState("");
   const [username, setUsername] = useState("");
   const [showUsernameDialog, setShowUsernameDialog] = useState(true);
-  const [timeLeft, setTimeLeft] = useState(3600);
+  const [timeLeft, setTimeLeft] = useState(3600); // Will be updated with actual room expiry
+  const [roomExpiresAt, setRoomExpiresAt] = useState<string | null>(null);
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
@@ -240,6 +241,75 @@ export function CollaborativeCodeInterface({
     const interval = setInterval(checkExpiry, 60000); // Check every minute
     return () => clearInterval(interval);
   }, [sessionExpiry, roomId, toast]);
+
+  // FIXED: Fetch room info to get actual expiry time
+  useEffect(() => {
+    const fetchRoomInfo = async () => {
+      try {
+        console.log(`Fetching room info for room: ${roomId}`);
+        const response = await fetch(`/api/chat/rooms/${roomId}`);
+        console.log('Room info response status:', response.status);
+        
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Room info data:', data);
+          
+          if (data.success && data.room.expiresAt) {
+            console.log('Setting room expiry time:', data.room.expiresAt);
+            setRoomExpiresAt(data.room.expiresAt);
+            
+            // Calculate initial time left
+            const expiryTime = new Date(data.room.expiresAt).getTime();
+            const now = Date.now();
+            const secondsLeft = Math.max(0, Math.floor((expiryTime - now) / 1000));
+            console.log('Initial seconds left:', secondsLeft);
+            setTimeLeft(secondsLeft);
+          } else {
+            console.warn('Room info response missing expiresAt:', data);
+          }
+        } else {
+          console.error('Failed to fetch room info, status:', response.status);
+        }
+      } catch (error) {
+        console.error('Error fetching room info:', error);
+      }
+    };
+    
+    if (roomId) {
+      fetchRoomInfo();
+    }
+  }, [roomId]);
+
+  // FIXED: Timer countdown with actual room expiry time
+  useEffect(() => {
+    if (!roomExpiresAt) return;
+    
+    const timer = setInterval(() => {
+      const expiryTime = new Date(roomExpiresAt).getTime();
+      const now = Date.now();
+      const secondsLeft = Math.max(0, Math.floor((expiryTime - now) / 1000));
+      
+      setTimeLeft(secondsLeft);
+      
+      // If time is up, show expiry message and redirect
+      if (secondsLeft === 0) {
+        toast({
+          title: "Room Expired",
+          description: "This room has expired and will be cleaned up.",
+          variant: "destructive"
+        });
+        
+        // Redirect after a short delay
+        setTimeout(() => {
+          onLeave();
+        }, 3000);
+        
+        clearInterval(timer);
+      }
+    }, 1000);
+    
+    return () => clearInterval(timer);
+  }, [roomExpiresAt, toast, onLeave]);
 
   // Ensure a document row exists, and load it
   const ensureAndLoadDocument = useCallback(async () => {
@@ -633,25 +703,27 @@ export function CollaborativeCodeInterface({
   // Join room (chat presence) - Enhanced to handle userData properly
   useEffect(() => {
     if (username && !isJoining) {
-      // If userData is provided, we're coming from room join page
+      // If userData is provided, we're coming from room join page (user already registered)
       if (userData?.username && userData.username === username) {
-        setIsJoining(true);
-        joinRoom(username)
-          .then(() => {
-            setShowUsernameDialog(false);
-            console.log(`User ${username} joined room as ${userData.isAdmin ? 'admin' : 'participant'}`);
-          })
-          .catch((error) => {
-            console.error("Failed to join room:", error);
-            toast({ title: "Error", description: "Failed to join room", variant: "destructive" });
-          })
-          .finally(() => setIsJoining(false));
+        // User came from room page with userData - DON'T join again, just refresh participants
+        setShowUsernameDialog(false);
+        console.log(`User ${username} entered collaborative room as ${userData.isAdmin ? 'admin' : 'participant'} (already registered in database)`);
+        
+        // Don't call joinRoom() here - user is already registered in chat_participants table
+        // Just update the UI state and we're good to go
+        toast({
+          title: "Success",
+          description: "Successfully entered the collaborative coding room!",
+        });
       }
       // If no userData but username is set (fallback for manual entry)
       else if (!userData?.username && username) {
         setIsJoining(true);
         joinRoom(username)
-          .then(() => setShowUsernameDialog(false))
+          .then(() => {
+            setShowUsernameDialog(false);
+            console.log(`User ${username} joined collaborative room via manual entry`);
+          })
           .catch((error) => {
             console.error("Failed to join room:", error);
             toast({ title: "Error", description: "Failed to join room", variant: "destructive" });
