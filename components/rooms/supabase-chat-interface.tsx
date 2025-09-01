@@ -58,7 +58,8 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave,
     joinRoom,
     updateParticipantStatus,
     kickParticipant,
-    clearError
+    clearError,
+    fetchParticipants
   } = useSupabaseChat(roomId);
 
   // FIXED: Comprehensive session and admin role persistence
@@ -143,8 +144,13 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave,
     }
   }, [participants, username, roomId, isCurrentUserAdmin]);
 
-  // FIXED: Session expiry monitoring
+  // FIXED: Session expiry monitoring and initial data loading
   useEffect(() => {
+    // Initial participant fetch when component mounts
+    if (roomId) {
+      fetchParticipants();
+    }
+    
     if (!sessionExpiry) return;
     
     const checkExpiry = () => {
@@ -165,9 +171,9 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave,
     
     const interval = setInterval(checkExpiry, 60000); // Check every minute
     return () => clearInterval(interval);
-  }, [sessionExpiry, roomId, toast]);
+  }, [sessionExpiry, roomId, toast, fetchParticipants]);
 
-  // FIXED: Enhanced join room logic with session management
+  // FIXED: Enhanced join room logic with session management and participant refresh
   useEffect(() => {
     if (username && !isJoining) {
       // Skip if we already have a valid session
@@ -178,8 +184,9 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave,
         try {
           const session = JSON.parse(storedSession);
           if (session.username === username && session.expiry > Date.now()) {
-            // Valid session exists, no need to rejoin
+            // Valid session exists, no need to rejoin but refresh participants
             setShowUsernameDialog(false);
+            fetchParticipants(); // Refresh to ensure we have current participant list
             return;
           }
         } catch (error) {
@@ -187,8 +194,35 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave,
         }
       }
       
-      // Join room if we have userData or username but no valid session
-      if ((userData?.username && userData.username === username) || (!userData?.username && username)) {
+      // FIXED: Only join if userData is provided from room page (user already registered)
+      // Don't attempt to join from chat interface if user came through proper room join flow
+      if (userData?.username && userData.username === username) {
+        // User came from room page with userData - just refresh participants
+        setShowUsernameDialog(false);
+        
+        // Create session after room page provided userData
+        const expiry = Date.now() + (2 * 60 * 60 * 1000); // 2 hours
+        const sessionData = {
+          username,
+          isAdmin: userData?.isAdmin || false,
+          role: userData?.isAdmin ? 'admin' : 'participant',
+          joinedAt: new Date().toISOString(),
+          expiry
+        };
+        
+        localStorage.setItem(sessionKey, JSON.stringify(sessionData));
+        setSessionExpiry(expiry);
+        
+        // Refresh participants to get current list
+        fetchParticipants();
+        
+        console.log(`User ${username} entered room as ${userData?.isAdmin ? 'admin' : 'participant'} (already registered)`);
+        toast({
+          title: "Welcome",
+          description: `Entered room as ${userData?.isAdmin ? 'Admin' : 'Participant'}`,
+        });
+      } else if (!userData?.username && username) {
+        // Legacy path - user entered username directly in chat interface
         setIsJoining(true);
         joinRoom(username)
           .then(() => {
@@ -198,8 +232,8 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave,
             const expiry = Date.now() + (2 * 60 * 60 * 1000); // 2 hours
             const sessionData = {
               username,
-              isAdmin: userData?.isAdmin || false,
-              role: userData?.isAdmin ? 'admin' : 'participant',
+              isAdmin: false, // Will be updated if user is first to join
+              role: 'participant',
               joinedAt: new Date().toISOString(),
               expiry
             };
@@ -207,10 +241,15 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave,
             localStorage.setItem(sessionKey, JSON.stringify(sessionData));
             setSessionExpiry(expiry);
             
-            console.log(`User ${username} joined room as ${userData?.isAdmin ? 'admin' : 'participant'}`);
+            // Force refresh participants after successful join
+            setTimeout(() => {
+              fetchParticipants();
+            }, 500); // Small delay to ensure server has processed the join
+            
+            console.log(`User ${username} joined room via chat interface`);
             toast({
               title: "Success",
-              description: `Joined room as ${userData?.isAdmin ? 'Admin' : 'Participant'}`,
+              description: "Joined room successfully",
             });
           })
           .catch((error) => {
@@ -226,7 +265,7 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave,
           });
       }
     }
-  }, [username, joinRoom, isJoining, userData, roomId, toast]);
+  }, [username, joinRoom, isJoining, userData, roomId, toast, fetchParticipants]);
 
   // Timer countdown
   useEffect(() => {
@@ -326,10 +365,21 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave,
     return avatars[index];
   };
 
-  // FIXED: Use persistent admin status
+  // FIXED: Use persistent admin status and debug participant count issues
   const sortedParticipants = [...participants].sort((a, b) => 
     new Date(a.joinedAt).getTime() - new Date(b.joinedAt).getTime()
   );
+  
+  // Debug logging for participant issues
+  useEffect(() => {
+    console.log('Participants updated:', {
+      count: participants.length,
+      sortedCount: sortedParticipants.length,
+      participants: participants.map(p => ({ username: p.username, isOnline: p.isOnline, id: p.id })),
+      currentUsername: username
+    });
+  }, [participants, username]);
+  
   const adminStatus = isCurrentUserAdmin || 
     (sortedParticipants.length > 0 && sortedParticipants[0]?.username === username);
 
@@ -434,7 +484,7 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave,
           <div className="flex items-center space-x-2">
             <Badge variant="secondary" className="flex items-center space-x-1">
               <Users className="h-3 w-3" />
-              <span>{participants.length}/10</span>
+              <span>{sortedParticipants.length}/10</span>
             </Badge>
             <ThemeToggle />
             <Button 
@@ -542,65 +592,96 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave,
                 <Users className="h-4 w-4 mr-2" />
                 Users ({sortedParticipants.length})
               </div>
-              {adminStatus && (
-                <div className="flex items-center text-xs text-primary">
-                  <Crown className="h-3 w-3 mr-1" />
-                  Admin
-                </div>
-              )}
+              <div className="flex items-center space-x-2">
+                {adminStatus && (
+                  <div className="flex items-center text-xs text-primary">
+                    <Crown className="h-3 w-3 mr-1" />
+                    Admin
+                  </div>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    fetchParticipants();
+                    toast({ title: "Refreshed", description: "Participant list updated" });
+                  }}
+                  className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                  title="Refresh participant list"
+                >
+                  <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </Button>
+              </div>
             </h3>
           </div>
           
           <ScrollArea className="flex-1">
             <div className="p-2 space-y-1">
-              {sortedParticipants.map((participant, index) => (
-                <div key={participant.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50 transition-colors">
-                  <div className="flex items-center space-x-3 min-w-0 flex-1">
-                    <Avatar className="w-8 h-8 shrink-0">
-                      <AvatarFallback 
-                        className="text-xs"
-                        style={{ backgroundColor: getParticipantColor(participant.username) + '20' }}
-                      >
-                        {getParticipantAvatar(participant.username)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center space-x-1">
-                        <span 
-                          className="font-medium text-sm truncate"
-                          style={{ color: getParticipantColor(participant.username) }}
+              {sortedParticipants.length === 0 ? (
+                <div className="text-center py-4 text-muted-foreground">
+                  <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No participants found</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fetchParticipants()}
+                    className="mt-2"
+                  >
+                    Refresh List
+                  </Button>
+                </div>
+              ) : (
+                sortedParticipants.map((participant, index) => (
+                  <div key={participant.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center space-x-3 min-w-0 flex-1">
+                      <Avatar className="w-8 h-8 shrink-0">
+                        <AvatarFallback 
+                          className="text-xs"
+                          style={{ backgroundColor: getParticipantColor(participant.username) + '20' }}
                         >
-                          {participant.username}
-                        </span>
-                        <div className={`w-2 h-2 rounded-full ${participant.isOnline ? 'bg-green-500' : 'bg-gray-400'}`} />
-                        {index === 0 && (
-                          <span className="text-xs bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 px-2 py-0.5 rounded-full flex items-center">
-                            <Crown className="h-3 w-3 mr-1" />
-                            Admin
+                          {getParticipantAvatar(participant.username)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center space-x-1">
+                          <span 
+                            className="font-medium text-sm truncate"
+                            style={{ color: getParticipantColor(participant.username) }}
+                          >
+                            {participant.username}
                           </span>
+                          <div className={`w-2 h-2 rounded-full ${participant.isOnline ? 'bg-green-500' : 'bg-gray-400'}`} />
+                          {index === 0 && (
+                            <span className="text-xs bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 px-2 py-0.5 rounded-full flex items-center">
+                              <Crown className="h-3 w-3 mr-1" />
+                              Admin
+                            </span>
+                          )}
+                        </div>
+                        {participant.username === username && (
+                          <span className="text-xs text-muted-foreground">You</span>
                         )}
                       </div>
-                      {participant.username === username && (
-                        <span className="text-xs text-muted-foreground">You</span>
-                      )}
                     </div>
+                    
+                    {/* Kick button for admin */}
+                    {adminStatus && 
+                     participant.username !== username && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleKickClick(participant.username)}
+                        className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                        title={`Remove ${participant.username} from room`}
+                      >
+                        <UserMinus className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
-                  
-                  {/* Kick button for admin */}
-                  {adminStatus && 
-                   participant.username !== username && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => handleKickClick(participant.username)}
-                      className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                      title={`Remove ${participant.username} from room`}
-                    >
-                      <UserMinus className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </ScrollArea>
         </div>

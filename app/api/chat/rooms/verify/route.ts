@@ -40,9 +40,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate user data
+    // FIXED: Don't automatically generate phantom users
+    // Only verify room exists and return room info - don't create participants here
+    if (!username) {
+      // Just return room info without creating a participant
+      return NextResponse.json({
+        success: true,
+        room: {
+          id: roomId,
+          name: room.name,
+          expiryTime: room.expiry_time,
+          expiresAt: room.expires_at
+        },
+        requiresUsername: true
+      });
+    }
+    
+    const userDisplayName = username.trim();
     const userId = generateId();
-    const userDisplayName = username || `User_${Math.random().toString(36).substr(2, 6)}`;
 
     // Check if user already exists in this room
     const { data: existingParticipant } = await supabaseAdmin

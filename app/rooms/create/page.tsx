@@ -315,13 +315,13 @@ export default function CreateRoomPage() {
                     <SelectContent className="bg-background/95 backdrop-blur-xs border-border/50">
                       <SelectItem value="30m">30 Minutes</SelectItem>
                       <SelectItem value="1h">1 Hour</SelectItem>
-                      <SelectItem value="2h">2 Hours</SelectItem>
+                      {/* <SelectItem value="2h">2 Hours</SelectItem>
                       <SelectItem value="6h">6 Hours</SelectItem>
-                      <SelectItem value="24h">24 Hours</SelectItem>
+                      <SelectItem value="24h">24 Hours</SelectItem> */}
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Room will be automatically deleted after this time or after inactivity of 120 minutes
+                    Room will be automatically deleted after this time.
                   </p>
                 </div>
 

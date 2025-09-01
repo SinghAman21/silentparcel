@@ -79,8 +79,29 @@ export default function ChatRoomPage({ searchParams }: { searchParams: Promise<{
 		setError("");
 
 		try {
-			// Generate username if not provided
-			const finalUsername = username.trim() || `Guest_${Math.random().toString(36).substr(2, 6)}`;
+			// Generate username if not provided (only when user actually joins)
+			const finalUsername = username.trim() || `User_${Math.random().toString(36).substr(2, 6)}`;
+			
+			// FIXED: Immediately register user in chat_participants table
+			const registerResponse = await fetch('/api/chat/participants', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({
+					roomId,
+					username: finalUsername,
+					userId: self.crypto.randomUUID() // Generate unique user ID
+				}),
+			});
+
+			if (!registerResponse.ok) {
+				const errorData = await registerResponse.json();
+				throw new Error(errorData.error || 'Failed to join room');
+			}
+
+			const registrationData = await registerResponse.json();
+			console.log('User registered in chat_participants:', registrationData);
 			
 			// Create user data with admin status if first user
 			const newUserData = {
@@ -89,22 +110,21 @@ export default function ChatRoomPage({ searchParams }: { searchParams: Promise<{
 				isAdmin: isFirstUser // First user becomes admin
 			};
 
-			// Set user data first
+			// Set user data after successful backend registration
 			setUserData(newUserData);
 			setIsAuthenticated(true);
 			setError("");
 			
-			const roleMessage = isFirstUser ? "as Admin" : "as Participant";
 			toast({
 				title: "Success",
-				description: `Successfully joined the room ${roleMessage}!`,
+				description: "Successfully joined the room!",
 			});
 		} catch (error) {
 			console.error("Error joining room:", error);
 			setError("Failed to join room. Please try again.");
 			toast({
 				title: "Error",
-				description: "Failed to join room. Please try again.",
+				description: error instanceof Error ? error.message : "Failed to join room. Please try again.",
 				variant: "destructive",
 			});
 		} finally {
@@ -199,18 +219,13 @@ export default function ChatRoomPage({ searchParams }: { searchParams: Promise<{
 								<Shield className="h-5 w-5 mr-2" />
 								Join {roomInfo?.roomType === 'code' ? 'Code' : 'Chat'} Room
 							</CardTitle>
-							{isFirstUser && (
-								<p className="text-sm text-primary font-medium">
-									🎉 You'll be the room admin! You can manage participants.
-								</p>
-							)}
 						</CardHeader>
 						<CardContent className="space-y-4">
 							<div className="space-y-2">
 								<Label htmlFor="username">Username (Optional)</Label>
 								<Input
 									id="username"
-									placeholder="Anonymous User"
+									placeholder="Enter username or leave blank for auto-generated"
 									value={username}
 									onChange={(e) => setUsername(e.target.value)}
 									className="bg-background/50"
@@ -229,7 +244,7 @@ export default function ChatRoomPage({ searchParams }: { searchParams: Promise<{
 										Joining...
 									</>
 								) : (
-									`Join Room${isFirstUser ? ' as Admin' : ''}`
+									`Join Room`
 								)}
 							</Button>
 						</CardContent>

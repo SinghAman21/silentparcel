@@ -229,7 +229,7 @@ export function ChatInterface({ roomId, roomPassword, onLeave }: ChatInterfacePr
           <div className="border-t border-border/40 p-4 bg-background/50 shrink-0">
             <div className="flex space-x-2">
               <Button variant="outline" size="icon" className="hover:scale-105 transition-transform shrink-0">
-                <Paperclip className="h-4 w-4" />
+                {/* <Paperclip className="h-4 w-4" /> */}
               </Button>
               <Input
                 placeholder="Type a message..."

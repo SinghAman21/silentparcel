@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     const roomId = generateId().substring(0, 8); // Ensure 8 characters
     const roomPassword = generateRoomPassword();
     const creatorId = generateId();
-    const creatorUsername = `User_${Math.random().toString(36).substr(2, 6)}`;
+    // FIXED: Don't create phantom users - room creation shouldn't auto-add participants
 
     // Create room in Supabase - REMOVED problematic fields
     const { data: room, error: roomError } = await supabaseAdmin
@@ -62,21 +62,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create creator as participant
-    const { error: participantError } = await supabaseAdmin
-      .from('chat_participants')
-      .insert({
-        room_id: roomId,
-        username: creatorUsername,
-        user_id: creatorId,
-        is_online: true,
-        cursor_color: getRandomColor()
-      });
-
-    if (participantError) {
-      console.error('Error creating participant:', participantError);
-      // Don't fail the request, just log the error
-    }
+    // FIXED: Don't automatically create participants during room creation
+    // Participants will be added when users actually join the room with real usernames
 
     // Create initial code document for code rooms (with default language)
     if (roomType !== 'chat') {
@@ -107,7 +94,6 @@ export async function POST(request: NextRequest) {
         ip_address: getClientIP(request),
         metadata: {
           roomName: roomName || getDefaultRoomName(roomType),
-          username: creatorUsername,
           expiryTime: expiryTime || '1h',
           roomType
         }
@@ -133,11 +119,7 @@ export async function POST(request: NextRequest) {
         roomType
         // Removed: defaultLanguage, collaborativeMode
       },
-      user: {
-        id: creatorId,
-        username: creatorUsername,
-        isCreator: true
-      },
+      // No phantom user created - first real user to join will become admin
       rateLimit: {
         remaining: rateLimitResult.remaining
       }
