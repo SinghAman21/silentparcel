@@ -80,10 +80,11 @@ export default function ChatRoomPage({ searchParams }: { searchParams: Promise<{
 
 		try {
 			// Generate username if not provided (only when user actually joins)
-			const finalUsername = username.trim() || `User_${Math.random().toString(36).substr(2, 6)}`;
+			let finalUsername = username.trim() || `User_${Math.random().toString(36).substr(2, 6)}`;
+			let isGeneratedUsername = false;
 			
-			// FIXED: Immediately register user in chat_participants table
-			const registerResponse = await fetch('/api/chat/participants', {
+			// First attempt to register with provided/generated username
+			let registerResponse = await fetch('/api/chat/participants', {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
@@ -91,9 +92,33 @@ export default function ChatRoomPage({ searchParams }: { searchParams: Promise<{
 				body: JSON.stringify({
 					roomId,
 					username: finalUsername,
-					userId: self.crypto.randomUUID() // Generate unique user ID
+					userId: self.crypto.randomUUID()
 				}),
 			});
+
+			// Handle username conflict
+			if (registerResponse.status === 409) {
+				const conflictData = await registerResponse.json();
+				
+				if (conflictData.code === 'USERNAME_EXISTS') {
+					// Generate a random username to resolve conflict
+					finalUsername = `User_${Math.random().toString(36).substr(2, 6)}`;
+					isGeneratedUsername = true;
+					
+					// Try again with generated username
+					registerResponse = await fetch('/api/chat/participants', {
+						method: 'POST',
+						headers: {
+							'Content-Type': 'application/json',
+						},
+						body: JSON.stringify({
+							roomId,
+							username: finalUsername,
+							userId: self.crypto.randomUUID()
+						}),
+					});
+				}
+			}
 
 			if (!registerResponse.ok) {
 				const errorData = await registerResponse.json();
@@ -115,10 +140,19 @@ export default function ChatRoomPage({ searchParams }: { searchParams: Promise<{
 			setIsAuthenticated(true);
 			setError("");
 			
-			toast({
-				title: "Success",
-				description: "Successfully joined the room!",
-			});
+			// Show appropriate success message
+			if (isGeneratedUsername) {
+				toast({
+					title: "Username Changed",
+					description: `That username already exists! You've been assigned: ${finalUsername}`,
+					variant: "default",
+				});
+			} else {
+				toast({
+					title: "Success",
+					description: "Successfully joined the room!",
+				});
+			}
 		} catch (error) {
 			console.error("Error joining room:", error);
 			setError("Failed to join room. Please try again.");

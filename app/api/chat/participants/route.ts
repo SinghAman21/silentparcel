@@ -48,37 +48,18 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (existingParticipant) {
-      // Update last seen and online status
-      const { data: updatedParticipant, error: updateError } = await supabaseAdmin
-        .from('chat_participants')
-        .update({
-          last_seen: new Date().toISOString(),
-          is_online: true
-        })
-        .eq('id', existingParticipant.id)
-        .select()
-        .single();
-
-      if (updateError) {
-        console.error('Error updating participant:', updateError);
-        return NextResponse.json(
-          { error: 'Failed to update participant' },
-          { status: 500 }
-        );
-      }
-
-      return NextResponse.json({
-        success: true,
-        participant: {
-          id: updatedParticipant.id,
-          roomId: updatedParticipant.room_id,
-          username: updatedParticipant.username,
-          joinedAt: updatedParticipant.joined_at,
-          lastSeen: updatedParticipant.last_seen,
-          isOnline: updatedParticipant.is_online,
-          userId: updatedParticipant.user_id
-        }
-      });
+      // Return error for duplicate username to trigger frontend handling
+      return NextResponse.json(
+        { 
+          error: 'Username already exists in this room',
+          code: 'USERNAME_EXISTS',
+          existingUser: {
+            username: existingParticipant.username,
+            joinedAt: existingParticipant.joined_at
+          }
+        },
+        { status: 409 } // Conflict status code
+      );
     }
 
     // Insert new participant
