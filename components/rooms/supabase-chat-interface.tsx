@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Send, Paperclip, Users, Crown, Shield, Clock, LogOut, MoreVertical, Wifi, WifiOff, AlertCircle, UserMinus } from 'lucide-react';
+import { Send, Paperclip, Users, Crown, Shield, Clock, LogOut, MoreVertical, Wifi, WifiOff, AlertCircle, UserMinus, Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -151,6 +151,7 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave,
   const [isCurrentUserAdmin, setIsCurrentUserAdmin] = useState(false);
   const [sessionExpiry, setSessionExpiry] = useState<number | null>(null);
   const [decryptedMessages, setDecryptedMessages] = useState<Map<string, string>>(new Map());
+  const [copiedRoomId, setCopiedRoomId] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -671,16 +672,41 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave,
               <h1 className="font-bold text-lg">{roomName || 'Secret Chat Room'}</h1>
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-sm text-muted-foreground">Room ID:</span>
-                <code 
-                  className="bg-muted/50 px-2 py-1 rounded text-sm font-mono cursor-pointer hover:bg-muted transition-colors"
-                  onClick={() => {
-                    navigator.clipboard.writeText(roomId);
-                    toast({ title: "Copied!", description: "Room ID copied to clipboard" });
-                  }}
-                  title="Click to copy room ID"
-                >
-                  {roomId}
-                </code>
+                <div className="flex items-center space-x-2">
+                  <code className="bg-muted/50 px-2 py-1 rounded text-sm font-mono">
+                    {roomId}
+                  </code>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(roomId);
+                        setCopiedRoomId(true);
+                        setTimeout(() => setCopiedRoomId(false), 2000);
+                        toast({ 
+                          title: "Copied!", 
+                          description: "Room ID copied to clipboard" 
+                        });
+                      } catch (err) {
+                        console.error('Failed to copy room ID:', err);
+                        toast({
+                          title: "Error",
+                          description: "Failed to copy room ID to clipboard",
+                          variant: "destructive"
+                        });
+                      }
+                    }}
+                    className="h-6 w-6 p-0 hover:scale-105 transition-transform"
+                    title="Copy Room ID"
+                  >
+                    {copiedRoomId ? (
+                      <Check className="h-3 w-3 text-green-500" />
+                    ) : (
+                      <Copy className="h-3 w-3" />
+                    )}
+                  </Button>
+                </div>
               </div>
               <div className="flex items-center space-x-2 text-sm text-muted-foreground">
                 <Clock className="h-3 w-3" />
@@ -793,9 +819,9 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave,
           {/* Message Input */}
           <div className="border-t border-border/40 p-4 bg-background/50 shrink-0">
             <div className="flex space-x-2">
-              <Button variant="outline" size="icon" className="hover:scale-105 transition-transform shrink-0">
-                {/* <Paperclip className="h-4 w-4" /> */}
-              </Button>
+              {/* <Button variant="outline" size="icon" className="hover:scale-105 transition-transform shrink-0">
+                <Paperclip className="h-4 w-4" />
+              </Button> */}
               <Input
                 placeholder="Type a message..."
                 value={message}

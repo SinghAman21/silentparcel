@@ -6,7 +6,7 @@ const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import type { editor as MonacoEditorTypes } from "monaco-editor";
 
-import { Send, Users, Clock, LogOut, Settings, Download, Code, MessageSquare, AlertCircle, GripVertical } from "lucide-react";
+import { Send, Users, Clock, LogOut, Settings, Download, Code, MessageSquare, AlertCircle, GripVertical, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -168,6 +168,7 @@ export function CollaborativeCodeInterface({
   const [isJoining, setIsJoining] = useState(false);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [decryptedMessages, setDecryptedMessages] = useState<Map<string, string>>(new Map());
+  const [copiedRoomId, setCopiedRoomId] = useState(false);
   
   // Chat references
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -1245,16 +1246,41 @@ export function CollaborativeCodeInterface({
             <h1 className="font-bold text-lg">{roomName || 'Collaborative Code Room'}</h1>
             <div className="flex items-center gap-2 mt-1">
               <span className="text-sm text-muted-foreground">Room ID:</span>
-              <code 
-                className="bg-muted/50 px-2 py-1 rounded text-sm font-mono cursor-pointer hover:bg-muted transition-colors"
-                onClick={() => {
-                  navigator.clipboard.writeText(roomId);
-                  toast({ title: "Copied!", description: "Room ID copied to clipboard" });
-                }}
-                title="Click to copy room ID"
-              >
-                {roomId}
-              </code>
+<div className="flex items-center space-x-2">
+                  <code className="bg-muted/50 px-2 py-1 rounded text-sm font-mono">
+                    {roomId}
+                  </code>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(roomId);
+                        setCopiedRoomId(true);
+                        setTimeout(() => setCopiedRoomId(false), 2000);
+                        toast({ 
+                          title: "Copied!", 
+                          description: "Room ID copied to clipboard" 
+                        });
+                      } catch (err) {
+                        console.error('Failed to copy room ID:', err);
+                        toast({
+                          title: "Error",
+                          description: "Failed to copy room ID to clipboard",
+                          variant: "destructive"
+                        });
+                      }
+                    }}
+                    className="h-6 w-6 p-0 hover:scale-105 transition-transform"
+                    title="Copy Room ID"
+                  >
+                    {copiedRoomId ? (
+                      <Check className="h-3 w-3 text-green-500" />
+                    ) : (
+                      <Copy className="h-3 w-3" />
+                    )}
+                  </Button>
+                </div>
             </div>
             <div className="flex items-center gap-3 text-sm text-muted-foreground mt-2">
               <span className="inline-flex items-center gap-1">
