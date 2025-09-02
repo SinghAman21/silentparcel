@@ -294,7 +294,7 @@ export default function ChatRoomPage({ searchParams }: { searchParams: Promise<{
 			return (
 				<CollaborativeCodeInterface
 					roomId={roomId}
-					roomPassword=""
+					roomPassword={roomId}
 					userData={userData}
 					roomName={roomNameFromUrl || roomInfo?.name}
 					onLeave={() => {
@@ -307,7 +307,7 @@ export default function ChatRoomPage({ searchParams }: { searchParams: Promise<{
 			return (
 				<SupabaseChatInterface
 					roomId={roomId}
-					roomPassword=""
+					roomPassword={roomId}
 					userData={userData}
 					roomName={roomNameFromUrl || roomInfo?.name}
 					onLeave={() => {

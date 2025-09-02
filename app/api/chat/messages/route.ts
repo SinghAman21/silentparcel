@@ -6,6 +6,14 @@ export async function POST(request: NextRequest) {
   try {
     const { roomId, username, userId, message, messageType = 'text' } = await request.json();
 
+    console.log('🐻 API received message:', {
+      roomId,
+      username,
+      messageLength: message?.length,
+      isEncrypted: message?.includes(':') && message?.split(':').length === 3,
+      messagePreview: message?.substring(0, 50) + '...'
+    });
+
     if (!roomId || !username || !message) {
       return NextResponse.json(
         { error: 'Room ID, username, and message are required' },

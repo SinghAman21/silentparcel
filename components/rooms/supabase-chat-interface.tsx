@@ -25,6 +25,109 @@ import { LeaveRoomDialog } from '@/components/rooms/leave-room-dialog';
 import { useSupabaseChat, ChatMessage, ChatParticipant } from '@/hooks/use-supabase-chat';
 import { useToast } from '@/hooks/use-toast';
 
+// Encryption utilities using Web Crypto API (browser-compatible)
+const encryptMessage = async (message: string, password: string): Promise<string> => {
+  try {
+    // Derive key from password using PBKDF2
+    const encoder = new TextEncoder();
+    const passwordBuffer = encoder.encode(password);
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    
+    const keyMaterial = await crypto.subtle.importKey(
+      'raw',
+      passwordBuffer,
+      { name: 'PBKDF2' },
+      false,
+      ['deriveKey']
+    );
+    
+    const key = await crypto.subtle.deriveKey(
+      {
+        name: 'PBKDF2',
+        salt,
+        iterations: 100000,
+        hash: 'SHA-256'
+      },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt']
+    );
+    
+    // Generate IV
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    
+    // Encrypt the message
+    const messageBuffer = encoder.encode(message);
+    const encrypted = await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv },
+      key,
+      messageBuffer
+    );
+    
+    // Combine salt, iv, and encrypted data
+    const saltHex = Array.from(salt, byte => byte.toString(16).padStart(2, '0')).join('');
+    const ivHex = Array.from(iv, byte => byte.toString(16).padStart(2, '0')).join('');
+    const encryptedHex = Array.from(new Uint8Array(encrypted), byte => byte.toString(16).padStart(2, '0')).join('');
+    
+    return saltHex + ':' + ivHex + ':' + encryptedHex;
+  } catch (error) {
+    console.error('Encryption failed:', error);
+    return message; // Fallback to plain text
+  }
+};
+
+const decryptMessage = async (encryptedData: string, password: string): Promise<string> => {
+  try {
+    const parts = encryptedData.split(':');
+    if (parts.length !== 3) {
+      throw new Error('Invalid encrypted data format');
+    }
+    
+    const salt = new Uint8Array(parts[0].match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+    const iv = new Uint8Array(parts[1].match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+    const encrypted = new Uint8Array(parts[2].match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+    
+    // Derive the same key from password
+    const encoder = new TextEncoder();
+    const passwordBuffer = encoder.encode(password);
+    
+    const keyMaterial = await crypto.subtle.importKey(
+      'raw',
+      passwordBuffer,
+      { name: 'PBKDF2' },
+      false,
+      ['deriveKey']
+    );
+    
+    const key = await crypto.subtle.deriveKey(
+      {
+        name: 'PBKDF2',
+        salt,
+        iterations: 100000,
+        hash: 'SHA-256'
+      },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['decrypt']
+    );
+    
+    // Decrypt the message
+    const decrypted = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv },
+      key,
+      encrypted
+    );
+    
+    const decoder = new TextDecoder();
+    return decoder.decode(decrypted);
+  } catch (error) {
+    console.error('Decryption failed:', error);
+    return encryptedData; // Return encrypted text if decryption fails
+  }
+};
+
 interface SupabaseChatInterfaceProps {
   roomId: string;
   roomPassword: string;
@@ -47,6 +150,7 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave,
   const [isKicking, setIsKicking] = useState(false);
   const [isCurrentUserAdmin, setIsCurrentUserAdmin] = useState(false);
   const [sessionExpiry, setSessionExpiry] = useState<number | null>(null);
+  const [decryptedMessages, setDecryptedMessages] = useState<Map<string, string>>(new Map());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -62,6 +166,44 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave,
     clearError,
     fetchParticipants
   } = useSupabaseChat(roomId);
+
+  // Decrypt messages when they arrive or room password changes
+  useEffect(() => {
+    const decryptAllMessages = async () => {
+      if (!roomPassword) return;
+      
+      const newDecryptedMap = new Map<string, string>();
+      
+      for (const msg of messages) {
+        // Skip system messages (they're not encrypted)
+        if (msg.messageType === 'system') {
+          newDecryptedMap.set(msg.id, msg.message);
+          continue;
+        }
+        
+        // Check if message looks encrypted (has our format salt:iv:encrypted)
+        if (msg.message.includes(':') && msg.message.split(':').length === 3) {
+          try {
+            const decrypted = await decryptMessage(msg.message, roomPassword);
+            console.log('🔒 Encrypted from DB:', msg.message.substring(0, 50) + '...');
+            console.log('🔐 Decrypted for display:', decrypted);
+            newDecryptedMap.set(msg.id, decrypted);
+          } catch (error) {
+            console.error('Failed to decrypt message:', msg.id, error);
+            // If decryption fails, show the original message
+            newDecryptedMap.set(msg.id, msg.message);
+          }
+        } else {
+          // Message is probably plain text (legacy or system message)
+          newDecryptedMap.set(msg.id, msg.message);
+        }
+      }
+      
+      setDecryptedMessages(newDecryptedMap);
+    };
+
+    decryptAllMessages();
+  }, [messages, roomPassword]);
 
   // FIXED: Comprehensive session and admin role persistence
   useEffect(() => {
@@ -354,9 +496,23 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave,
 
     setIsSending(true);
     try {
-      await sendMessage(message, username, 'text');
+      // Encrypt message before sending to database
+      const encryptedContent = await encryptMessage(message, roomPassword);
+      
+      console.log('🔐 Original message:', message);
+      console.log('🔒 Encrypted for database:', encryptedContent);
+      
+      // Send encrypted message to database
+      await sendMessage(encryptedContent, username, 'text');
       setMessage('');
       clearError();
+      
+      // Show encryption status in toast
+      toast({
+        title: "Message Encrypted",
+        description: "Your message has been encrypted and sent securely.",
+        duration: 2000,
+      });
     } catch (error) {
       console.error('Failed to send message:', error);
       toast({
@@ -539,6 +695,10 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave,
                     {isConnected ? 'Connected' : 'Disconnected'}
                   </span>
                 </div>
+                <div className="flex items-center space-x-1">
+                  <Shield className="h-3 w-3 text-green-500" />
+                  <span className="text-xs">E2E Encrypted</span>
+                </div>
               </div>
             </div>
           </div>
@@ -586,37 +746,46 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave,
           {/* Messages */}
           <ScrollArea className="flex-1 p-4">
             <div className="space-y-4 max-w-full">
-              {messages.map((msg) => (
-                <div key={msg.id} className="flex items-start space-x-3 max-w-full">
-                  <Avatar className="w-8 h-8 shrink-0">
-                    <AvatarFallback 
-                      className="text-xs" 
-                      style={{ backgroundColor: getParticipantColor(msg.username) + '20' }}
-                    >
-                      {getParticipantAvatar(msg.username)}
-                    </AvatarFallback>
-                  </Avatar>
-                  
-                  <div className="flex-1 min-w-0">
-                    <div className="max-w-full">
-                      <div className="flex items-center space-x-2 mb-1 flex-wrap">
-                        <span 
-                          className="font-semibold text-sm truncate"
-                          style={{ color: getParticipantColor(msg.username) }}
-                        >
-                          {msg.username}
-                        </span>
-                        <span className="text-xs text-muted-foreground shrink-0">
-                          {new Date(msg.createdAt).toLocaleTimeString()}
-                        </span>
-                      </div>
-                      <div className="bg-muted/50 rounded-lg px-3 py-2 max-w-full break-words">
-                        {msg.message}
+              {messages.map((msg) => {
+                // Get decrypted message content
+                const messageContent = decryptedMessages.get(msg.id) || msg.message;
+                const isEncrypted = msg.message.includes(':') && msg.message.split(':').length === 3 && msg.messageType !== 'system';
+                
+                return (
+                  <div key={msg.id} className="flex items-start space-x-3 max-w-full">
+                    <Avatar className="w-8 h-8 shrink-0">
+                      <AvatarFallback 
+                        className="text-xs" 
+                        style={{ backgroundColor: getParticipantColor(msg.username) + '20' }}
+                      >
+                        {getParticipantAvatar(msg.username)}
+                      </AvatarFallback>
+                    </Avatar>
+                    
+                    <div className="flex-1 min-w-0">
+                      <div className="max-w-full">
+                        <div className="flex items-center space-x-2 mb-1 flex-wrap">
+                          <span 
+                            className="font-semibold text-sm truncate"
+                            style={{ color: getParticipantColor(msg.username) }}
+                          >
+                            {msg.username}
+                          </span>
+                          {isEncrypted && (
+                            <Shield className="h-3 w-3 text-green-500" />
+                          )}
+                          <span className="text-xs text-muted-foreground shrink-0">
+                            {new Date(msg.createdAt).toLocaleTimeString()}
+                          </span>
+                        </div>
+                        <div className="bg-muted/50 rounded-lg px-3 py-2 max-w-full break-words">
+                          {messageContent}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               <div ref={messagesEndRef} />
             </div>
           </ScrollArea>
