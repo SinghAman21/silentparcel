@@ -25,7 +25,7 @@ export function LeaveRoomDialog({ isOpen, onConfirm, onCancel, roomId }: LeaveRo
             <div>
               You are about to leave room <span className="font-mono font-semibold">#{roomId}</span>.
             </div>
-            <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
+            {/* <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
               <p className="text-sm font-medium text-destructive mb-1">⚠️ Important Warning:</p>
               <ul className="text-sm text-muted-foreground space-y-1">
                 <li>• All chat messages will be permanently deleted</li>
@@ -33,10 +33,10 @@ export function LeaveRoomDialog({ isOpen, onConfirm, onCancel, roomId }: LeaveRo
                 <li>• This action cannot be undone</li>
                 <li>• You'll need the room password to rejoin</li>
               </ul>
-            </div>
+            </div> 
             <p className="text-sm text-muted-foreground">
               Are you sure you want to continue?
-            </p>
+            </p> */}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
