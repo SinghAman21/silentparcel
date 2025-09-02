@@ -1,4 +1,4 @@
-name: Cleanup Expired Files v2
+name: Cleanup Expired rooms
 
 on:
   schedule:
@@ -22,8 +22,4 @@ jobs:
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          NEXT_PUBLIC_APPWRITE_ENDPOINT: ${{ secrets.NEXT_PUBLIC_APPWRITE_ENDPOINT }}
-          NEXT_PUBLIC_APPWRITE_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_APPWRITE_PROJECT_ID }}
-          APPWRITE_API_KEY: ${{ secrets.APPWRITE_API_KEY }}
-          NEXT_PUBLIC_APPWRITE_BUCKET_KEY: ${{ secrets.NEXT_PUBLIC_APPWRITE_BUCKET_KEY }}
-        run: node scripts/cleanup-expired-files.js
+        run: node scripts/cleanup-expired-rooms.js
