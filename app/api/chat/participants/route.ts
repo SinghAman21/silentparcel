@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
+import * as crypto from 'crypto';
 
 export async function POST(request: NextRequest) {
   try {
-    const { roomId, username } = await request.json();
+    const { roomId, username, userId } = await request.json();
 
     if (!roomId || !username) {
       return NextResponse.json(
@@ -11,6 +12,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // Use provided userId or generate one
+    const participantUserId = userId || crypto.randomUUID();
 
     // Verify room exists and is active
     const { data: room, error: roomError } = await supabaseAdmin
@@ -44,36 +48,18 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (existingParticipant) {
-      // Update last seen and online status
-      const { data: updatedParticipant, error: updateError } = await supabaseAdmin
-        .from('chat_participants')
-        .update({
-          last_seen: new Date().toISOString(),
-          is_online: true
-        })
-        .eq('id', existingParticipant.id)
-        .select()
-        .single();
-
-      if (updateError) {
-        console.error('Error updating participant:', updateError);
-        return NextResponse.json(
-          { error: 'Failed to update participant' },
-          { status: 500 }
-        );
-      }
-
-      return NextResponse.json({
-        success: true,
-        participant: {
-          id: updatedParticipant.id,
-          roomId: updatedParticipant.room_id,
-          username: updatedParticipant.username,
-          joinedAt: updatedParticipant.joined_at,
-          lastSeen: updatedParticipant.last_seen,
-          isOnline: updatedParticipant.is_online
-        }
-      });
+      // Return error for duplicate username to trigger frontend handling
+      return NextResponse.json(
+        { 
+          error: 'Username already exists in this room',
+          code: 'USERNAME_EXISTS',
+          existingUser: {
+            username: existingParticipant.username,
+            joinedAt: existingParticipant.joined_at
+          }
+        },
+        { status: 409 } // Conflict status code
+      );
     }
 
     // Insert new participant
@@ -82,7 +68,7 @@ export async function POST(request: NextRequest) {
       .insert({
         room_id: roomId,
         username: username,
-        user_id: `user_${Math.random().toString(36).substring(2, 8)}`
+        user_id: participantUserId
       })
       .select()
       .single();
@@ -103,7 +89,8 @@ export async function POST(request: NextRequest) {
         username: newParticipant.username,
         joinedAt: newParticipant.joined_at,
         lastSeen: newParticipant.last_seen,
-        isOnline: newParticipant.is_online
+        isOnline: newParticipant.is_online,
+        userId: newParticipant.user_id
       }
     });
 
@@ -151,7 +138,8 @@ export async function GET(request: NextRequest) {
         username: participant.username,
         joinedAt: participant.joined_at,
         lastSeen: participant.last_seen,
-        isOnline: participant.is_online
+        isOnline: participant.is_online,
+        userId: participant.user_id
       }))
     });
 
@@ -166,7 +154,7 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const { roomId, username, isOnline } = await request.json();
+    const { roomId, username, userId, isOnline } = await request.json();
 
     if (!roomId || !username) {
       return NextResponse.json(
@@ -203,7 +191,8 @@ export async function PUT(request: NextRequest) {
         username: updatedParticipant.username,
         joinedAt: updatedParticipant.joined_at,
         lastSeen: updatedParticipant.last_seen,
-        isOnline: updatedParticipant.is_online
+        isOnline: updatedParticipant.is_online,
+        userId: updatedParticipant.user_id
       }
     });
 
@@ -214,4 +203,114 @@ export async function PUT(request: NextRequest) {
       { status: 500 }
     );
   }
-} 
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const { roomId, targetUsername, adminUsername, adminUserId } = await request.json();
+
+    if (!roomId || !targetUsername || !adminUsername) {
+      return NextResponse.json(
+        { error: 'Room ID, target username, and admin username are required' },
+        { status: 400 }
+      );
+    }
+
+    // Verify room exists and is active
+    const { data: room, error: roomError } = await supabaseAdmin
+      .from('chat_rooms')
+      .select('*')
+      .eq('room_id', roomId)
+      .eq('is_active', true)
+      .single();
+
+    if (roomError || !room) {
+      return NextResponse.json(
+        { error: 'Room not found or inactive' },
+        { status: 404 }
+      );
+    }
+
+    // Verify admin is the first participant (has admin privileges)
+    const { data: participants, error: participantsError } = await supabaseAdmin
+      .from('chat_participants')
+      .select('*')
+      .eq('room_id', roomId)
+      .order('joined_at', { ascending: true });
+
+    if (participantsError || !participants || participants.length === 0) {
+      return NextResponse.json(
+        { error: 'No participants found' },
+        { status: 404 }
+      );
+    }
+
+    // Check if the admin is actually the first user (room admin)
+    const firstParticipant = participants[0];
+    if (firstParticipant.username !== adminUsername) {
+      return NextResponse.json(
+        { error: 'Only the room admin can kick participants' },
+        { status: 403 }
+      );
+    }
+
+    // Cannot kick yourself
+    if (targetUsername === adminUsername) {
+      return NextResponse.json(
+        { error: 'Cannot kick yourself' },
+        { status: 400 }
+      );
+    }
+
+    // Find the target participant
+    const targetParticipant = participants.find((p: any) => p.username === targetUsername);
+    if (!targetParticipant) {
+      return NextResponse.json(
+        { error: 'Target participant not found' },
+        { status: 404 }
+      );
+    }
+
+    // Remove the participant from the room
+    const { error: deleteError } = await supabaseAdmin
+      .from('chat_participants')
+      .delete()
+      .eq('id', targetParticipant.id);
+
+    if (deleteError) {
+      console.error('Error removing participant:', deleteError);
+      return NextResponse.json(
+        { error: 'Failed to remove participant' },
+        { status: 500 }
+      );
+    }
+
+    // Send a system message about the kick
+    const { error: messageError } = await supabaseAdmin
+      .from('chat_messages')
+      .insert({
+        room_id: roomId,
+        username: 'System',
+        user_id: 'system',
+        message: `${targetUsername} has been removed from the room by ${adminUsername}`,
+        message_type: 'system'
+      });
+
+    if (messageError) {
+      console.error('Error sending system message:', messageError);
+      // Don't fail the request if system message fails
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `${targetUsername} has been removed from the room`
+    });
+
+  } catch (error) {
+    console.error('Error in participant removal:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}

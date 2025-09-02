@@ -28,7 +28,9 @@ export default function CreateRoomPage() {
   const [roomId, setRoomId] = useState('');
   const [copiedPassword, setCopiedPassword] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedRoomId, setCopiedRoomId] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [actualRoomName, setActualRoomName] = useState('');
 
   // const handleCreateRoom = async () => {
   //   setIsCreating(true);
@@ -117,6 +119,7 @@ export default function CreateRoomPage() {
       setGeneratedPassword(data.room.password);
       setRoomLink(link);
       setRoomId(data.room.id);
+      setActualRoomName(data.room.name || roomName || 'Unnamed Room');
       setStage('complete');
       
       toast({
@@ -151,20 +154,23 @@ export default function CreateRoomPage() {
       setIsCreating(false);
     }
   };
-  const copyToClipboard = async (text: string, type: 'password' | 'link') => {
+  const copyToClipboard = async (text: string, type: 'password' | 'link' | 'roomId') => {
     try {
       await navigator.clipboard.writeText(text);
       if (type === 'password') {
         setCopiedPassword(true);
         setTimeout(() => setCopiedPassword(false), 2000);
-      } else {
+      } else if (type === 'link') {
         setCopiedLink(true);
         setTimeout(() => setCopiedLink(false), 2000);
+      } else if (type === 'roomId') {
+        setCopiedRoomId(true);
+        setTimeout(() => setCopiedRoomId(false), 2000);
       }
       
       toast({
         title: "Copied!",
-        description: `${type === 'password' ? 'Password' : 'Link'} copied to clipboard`,
+        description: `${type === 'password' ? 'Password' : type === 'link' ? 'Link' : 'Room ID'} copied to clipboard`,
       });
     } catch (err) {
       console.error('Failed to copy: ', err);
@@ -176,18 +182,17 @@ export default function CreateRoomPage() {
     }
   };
 
-  const handleEnterRoom = () => {
-    router.push(`/rooms/${roomId}`);
+  const handleJoinRoom = () => {
+    // Navigate directly to the room
+    router.push(`/rooms/${roomId}?name=${encodeURIComponent(actualRoomName)}`);
   };
 
   const getRoomTypeDescription = () => {
     switch (roomType) {
       case 'chat':
-        return 'Traditional chat room with text messages';
+        return 'Anonymous chat room for secure conversations';
       case 'code':
-        return 'Collaborative code editor with real-time cursor tracking';
-      case 'mixed':
-        return 'Combined chat and code editor in one room';
+        return 'Collaborative coding environment with real-time editing and chat';
       default:
         return '';
     }
@@ -199,8 +204,6 @@ export default function CreateRoomPage() {
         return <MessageSquare className="h-5 w-5" />;
       case 'code':
         return <Code className="h-5 w-5" />;
-      case 'mixed':
-        return <Users className="h-5 w-5" />;
       default:
         return <MessageSquare className="h-5 w-5" />;
     }
@@ -261,19 +264,13 @@ export default function CreateRoomPage() {
                       <SelectItem value="chat">
                         <div className="flex items-center space-x-2">
                           <MessageSquare className="h-4 w-4" />
-                          <span>Chat Room</span>
+                          <span>Chatting</span>
                         </div>
                       </SelectItem>
                       <SelectItem value="code">
                         <div className="flex items-center space-x-2">
                           <Code className="h-4 w-4" />
-                          <span>Code Editor</span>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="mixed">
-                        <div className="flex items-center space-x-2">
-                          <Users className="h-4 w-4" />
-                          <span>Mixed (Chat + Code)</span>
+                          <span>Collab Coding</span>
                         </div>
                       </SelectItem>
                     </SelectContent>
@@ -318,13 +315,13 @@ export default function CreateRoomPage() {
                     <SelectContent className="bg-background/95 backdrop-blur-xs border-border/50">
                       <SelectItem value="30m">30 Minutes</SelectItem>
                       <SelectItem value="1h">1 Hour</SelectItem>
-                      <SelectItem value="2h">2 Hours</SelectItem>
+                      {/* <SelectItem value="2h">2 Hours</SelectItem>
                       <SelectItem value="6h">6 Hours</SelectItem>
-                      <SelectItem value="24h">24 Hours</SelectItem>
+                      <SelectItem value="24h">24 Hours</SelectItem> */}
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Room will be automatically deleted after this time or after inactivity of 120 minutes
+                    Room will be automatically deleted after this time.
                   </p>
                 </div>
 
@@ -333,8 +330,8 @@ export default function CreateRoomPage() {
                   <div className="flex-1">
                     <p className="font-medium text-sm">Privacy Features</p>
                     <p className="text-xs text-muted-foreground">
-                      Auto-generated password • Anonymous usernames • No message history
-                      {roomType !== 'chat' && ' • Real-time cursor tracking'}
+                      Room ID access • Anonymous usernames • No message history
+                      {roomType === 'code' && ' • Real-time collaborative editing'}
                     </p>
                   </div>
                 </div>
@@ -344,7 +341,7 @@ export default function CreateRoomPage() {
                   className="w-full hover:scale-105 transition-transform"
                   disabled={isCreating}
                 >
-                  {isCreating ? 'Creating...' : `Create ${roomType === 'code' ? 'Code' : roomType === 'mixed' ? 'Mixed' : 'Chat'} Room`}
+                  {isCreating ? 'Creating...' : `Create ${roomType === 'code' ? 'Collab Coding' : 'Chat'} Room`}
                 </Button>
               </CardContent>
             </Card>
@@ -356,7 +353,7 @@ export default function CreateRoomPage() {
             <div className="text-center">
               <h1 className="text-2xl font-bold mb-2">Room Created! 🎉</h1>
               <p className="text-muted-foreground">
-                Your {roomType === 'code' ? 'collaborative code room' : roomType === 'mixed' ? 'mixed chat and code room' : 'anonymous chat room'} is ready. Share the password with others to invite them.
+                Your {roomType === 'code' ? 'collaborative coding room' : 'anonymous chat room'} is ready. Share the room ID or link with others to invite them.
               </p>
             </div>
 
@@ -364,27 +361,31 @@ export default function CreateRoomPage() {
               <CardHeader>
                 <CardTitle className="flex items-center">
                   <Shield className="h-5 w-5 mr-2" />
-                  Room Credentials
+                  Room Details
                 </CardTitle>
+                <div className="text-lg font-semibold text-foreground">{actualRoomName}</div>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label>Room Password</Label>
+                  <Label>Room ID</Label>
                   <div className="flex space-x-2">
                     <Input 
-                      value={generatedPassword} 
+                      value={roomId} 
                       readOnly 
                       className="font-mono bg-background/50"
                     />
                     <Button
-                      onClick={() => copyToClipboard(generatedPassword, 'password')}
+                      onClick={() => copyToClipboard(roomId, 'roomId')}
                       variant="outline"
                       size="icon"
                       className="hover:scale-105 transition-transform"
                     >
-                      {copiedPassword ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                      {copiedRoomId ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                     </Button>
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    Share this ID with others to let them join your room
+                  </p>
                 </div>
 
                 <div className="space-y-2">
@@ -411,21 +412,16 @@ export default function CreateRoomPage() {
                   <span>Room expires in {expiryTime === '30m' ? '30 minutes' : expiryTime === '1h' ? '1 hour' : expiryTime === '2h' ? '2 hours' : expiryTime === '6h' ? '6 hours' : '24 hours'}</span>
                 </div>
 
-                {/* {roomType !== 'chat' && (
-                  <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                    <Code className="h-4 w-4" />
-                    <span>Default language: {defaultLanguage}</span>
-                  </div>
-                )} */}
+
               </CardContent>
             </Card>
 
             <div className="flex space-x-2">
               <Button 
-                onClick={handleEnterRoom}
+                onClick={handleJoinRoom}
                 className="flex-1 hover:scale-105 transition-transform"
               >
-                Enter Room as Admin
+                Join Room
               </Button>
               <Button 
                 variant="outline" 

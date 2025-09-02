@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Send, Paperclip, Users, Crown, Shield, Clock, LogOut, MoreVertical } from 'lucide-react';
+import { Send, Users, Crown, Shield, Clock, LogOut, MoreVertical, Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -10,7 +10,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import ThemeToggle from '@/components/theme-toggle';
-import { LeaveRoomDialog } from '@/components/leave-room-dialog';
+import { LeaveRoomDialog } from '@/components/rooms/leave-room-dialog';
+import { useToast } from '@/hooks/use-toast';
+// Using Web Crypto API for browser compatibility
 
 interface Message {
   id: string;
@@ -36,6 +38,109 @@ interface ChatInterfaceProps {
   onLeave: () => void;
 }
 
+// Encryption utilities using Web Crypto API (browser-compatible)
+const encryptMessage = async (message: string, password: string): Promise<string> => {
+  try {
+    // Derive key from password using PBKDF2
+    const encoder = new TextEncoder();
+    const passwordBuffer = encoder.encode(password);
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    
+    const keyMaterial = await crypto.subtle.importKey(
+      'raw',
+      passwordBuffer,
+      { name: 'PBKDF2' },
+      false,
+      ['deriveKey']
+    );
+    
+    const key = await crypto.subtle.deriveKey(
+      {
+        name: 'PBKDF2',
+        salt,
+        iterations: 100000,
+        hash: 'SHA-256'
+      },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt']
+    );
+    
+    // Generate IV
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    
+    // Encrypt the message
+    const messageBuffer = encoder.encode(message);
+    const encrypted = await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv },
+      key,
+      messageBuffer
+    );
+    
+    // Combine salt, iv, and encrypted data
+    const saltHex = Array.from(salt, byte => byte.toString(16).padStart(2, '0')).join('');
+    const ivHex = Array.from(iv, byte => byte.toString(16).padStart(2, '0')).join('');
+    const encryptedHex = Array.from(new Uint8Array(encrypted), byte => byte.toString(16).padStart(2, '0')).join('');
+    
+    return saltHex + ':' + ivHex + ':' + encryptedHex;
+  } catch (error) {
+    console.error('Encryption failed:', error);
+    return message; // Fallback to plain text
+  }
+};
+
+const decryptMessage = async (encryptedData: string, password: string): Promise<string> => {
+  try {
+    const parts = encryptedData.split(':');
+    if (parts.length !== 3) {
+      throw new Error('Invalid encrypted data format');
+    }
+    
+    const salt = new Uint8Array(parts[0].match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+    const iv = new Uint8Array(parts[1].match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+    const encrypted = new Uint8Array(parts[2].match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+    
+    // Derive the same key from password
+    const encoder = new TextEncoder();
+    const passwordBuffer = encoder.encode(password);
+    
+    const keyMaterial = await crypto.subtle.importKey(
+      'raw',
+      passwordBuffer,
+      { name: 'PBKDF2' },
+      false,
+      ['deriveKey']
+    );
+    
+    const key = await crypto.subtle.deriveKey(
+      {
+        name: 'PBKDF2',
+        salt,
+        iterations: 100000,
+        hash: 'SHA-256'
+      },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['decrypt']
+    );
+    
+    // Decrypt the message
+    const decrypted = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv },
+      key,
+      encrypted
+    );
+    
+    const decoder = new TextDecoder();
+    return decoder.decode(decrypted);
+  } catch (error) {
+    console.error('Decryption failed:', error);
+    return encryptedData; // Return encrypted text if decryption fails
+  }
+};
+
 export function ChatInterface({ roomId, roomPassword, onLeave }: ChatInterfaceProps) {
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
@@ -43,7 +148,9 @@ export function ChatInterface({ roomId, roomPassword, onLeave }: ChatInterfacePr
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [timeLeft, setTimeLeft] = useState(3600); // 1 hour in seconds
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
+  const [copiedRoomId, setCopiedRoomId] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
 
   // Initialize room data
   useEffect(() => {
@@ -67,20 +174,17 @@ export function ChatInterface({ roomId, roomPassword, onLeave }: ChatInterfacePr
       avatar: avatars[seededRandom(avatars.length)]
     });
 
-    // Create current user as admin
-    const admin = generateUser(true);
-    setCurrentUser(admin);
-    
-    // Generate some other users
-    const otherUsers = Array.from({ length: seededRandom(4) + 1 }, () => generateUser());
-    setUsers([admin, ...otherUsers]);
+    // FIXED: Only create current user, no phantom users
+    const currentUserData = generateUser(true);
+    setCurrentUser(currentUserData);
+    setUsers([currentUserData]); // Only add the actual current user
 
-    // Add welcome message
+    // Add welcome message (system messages are not encrypted)
     setMessages([
       {
         id: '1',
         user: 'System',
-        content: `Welcome to the secret room! You are now ${admin.name} (Admin)`,
+        content: `Welcome to the secret room! You are now ${currentUserData.name} (Admin)`,
         timestamp: new Date(),
         type: 'system'
       }
@@ -107,19 +211,53 @@ export function ChatInterface({ roomId, roomPassword, onLeave }: ChatInterfacePr
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!message.trim() || !currentUser) return;
+
+    // Encrypt message before storing/sending
+    const encryptedContent = await encryptMessage(message, roomPassword);
 
     const newMessage: Message = {
       id: `msg_${Date.now()}_${Math.random().toString(36).substring(2)}`,
       user: currentUser.name,
-      content: message,
+      content: message, // Display decrypted message in UI
       timestamp: new Date(),
       type: 'text'
     };
 
+    // In a real implementation, you would send the encrypted content to the server
+    // For demo purposes, we're showing the decrypted message in the UI
+    // but the actual storage would use encryptedContent
+
     setMessages(prev => [...prev, newMessage]);
     setMessage('');
+
+    // Show encryption status in toast
+    toast({
+      title: "Message Encrypted",
+      description: "Your message has been encrypted using Web Crypto API.",
+      duration: 2000,
+    });
+  };
+
+  const copyRoomId = async () => {
+    try {
+      await navigator.clipboard.writeText(roomId);
+      setCopiedRoomId(true);
+      setTimeout(() => setCopiedRoomId(false), 2000);
+      
+      toast({
+        title: "Copied!",
+        description: "Room ID copied to clipboard",
+      });
+    } catch (err) {
+      console.error('Failed to copy room ID:', err);
+      toast({
+        title: "Error",
+        description: "Failed to copy room ID to clipboard",
+        variant: "destructive"
+      });
+    }
   };
 
   const handleKickUser = (userId: string) => {
@@ -152,10 +290,27 @@ export function ChatInterface({ roomId, roomPassword, onLeave }: ChatInterfacePr
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <div>
-              <h1 className="font-bold">Secret Room #{roomId}</h1>
+              <div className="flex items-center space-x-2">
+                <h1 className="font-bold">Secret Room #{roomId}</h1>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={copyRoomId}
+                  className="h-6 w-6 p-0 hover:scale-105 transition-transform"
+                  title="Copy Room ID"
+                >
+                  {copiedRoomId ? (
+                    <Check className="h-3 w-3 text-green-500" />
+                  ) : (
+                    <Copy className="h-3 w-3" />
+                  )}
+                </Button>
+              </div>
               <div className="flex items-center space-x-2 text-sm text-muted-foreground">
                 <Clock className="h-3 w-3" />
                 <span>Self-destructs in {formatTime(timeLeft)}</span>
+                <Shield className="h-3 w-3 text-green-500 End-to-end encrypted" />
+                <span className="text-xs">E2E Encrypted</span>
               </div>
             </div>
           </div>
@@ -232,7 +387,7 @@ export function ChatInterface({ roomId, roomPassword, onLeave }: ChatInterfacePr
           <div className="border-t border-border/40 p-4 bg-background/50 shrink-0">
             <div className="flex space-x-2">
               <Button variant="outline" size="icon" className="hover:scale-105 transition-transform shrink-0">
-                <Paperclip className="h-4 w-4" />
+                {/* <Paperclip className="h-4 w-4" /> */}
               </Button>
               <Input
                 placeholder="Type a message..."

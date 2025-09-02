@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
+import * as crypto from 'crypto';
 
 // Types
 export interface ChatMessage {
@@ -49,9 +50,10 @@ export interface ChatState {
 }
 
 export interface ChatActions {
-  sendMessage: (username: string, message: string, messageType?: 'text' | 'system' | 'file') => Promise<ChatMessage>;
+  sendMessage: (message: string, username: string, messageType?: 'text' | 'system' | 'file') => Promise<ChatMessage>;
   joinRoom: (username: string) => Promise<ChatParticipant>;
   updateParticipantStatus: (username: string, isOnline: boolean) => Promise<ChatParticipant>;
+  kickParticipant: (targetUsername: string, adminUsername: string, adminUserId: string) => Promise<void>;
   fetchMessages: (limit?: number) => Promise<void>;
   fetchParticipants: () => Promise<void>;
   reconnect: () => Promise<void>;
@@ -87,11 +89,7 @@ const createError = (code: string, message: string): ChatError => ({
 
 // API client with retry logic
 class ChatAPIClient {
-  private static async makeRequest<T>(
-    url: string,
-    options: RequestInit = {},
-    retryCount = 0
-  ): Promise<T> {
+  private static async makeRequest<T>(url: string, options: RequestInit = {}, retryCount = 0): Promise<T> {
     try {
       const response = await fetch(url, {
         ...options,
@@ -106,7 +104,7 @@ class ChatAPIClient {
       }
 
       const data = await response.json();
-      
+
       if (!data.success) {
         throw new Error(data.error || 'API request failed');
       }
@@ -130,24 +128,71 @@ class ChatAPIClient {
     return this.makeRequest(`/api/chat/participants?roomId=${roomId}`);
   }
 
-  static async sendMessage(roomId: string, username: string, message: string, messageType = 'text'): Promise<{ message: ChatMessage }> {
+  // NOTE: these methods now accept userId (UUID) and forward it to the API.
+  static async sendMessage(roomId: string, username: string, userId: string, message: string, messageType = 'text'): Promise<{ message: ChatMessage }> {
     return this.makeRequest('/api/chat/messages', {
       method: 'POST',
-      body: JSON.stringify({ roomId, username, message, messageType }),
+      body: JSON.stringify({ roomId, username, userId, message, messageType }),
     });
   }
 
-  static async joinRoom(roomId: string, username: string): Promise<{ participant: ChatParticipant }> {
-    return this.makeRequest('/api/chat/participants', {
-      method: 'POST',
-      body: JSON.stringify({ roomId, username }),
-    });
+  static async joinRoom(roomId: string, username: string, userId: string): Promise<{ participant: ChatParticipant }> {
+    try {
+      const response = await fetch('/api/chat/participants', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ roomId, username, userId }),
+      });
+
+      // Handle username conflict (409) specially - BEFORE checking response.ok
+      if (response.status === 409) {
+        const conflictData = await response.json();
+        if (conflictData.code === 'USERNAME_EXISTS') {
+          // Generate a new username and retry
+          const newUsername = `User_${Math.random().toString(36).substr(2, 6)}`;
+          console.log(`Username conflict resolved: ${username} -> ${newUsername}`);
+          
+          // Retry with new username
+          return this.joinRoom(roomId, newUsername, userId);
+        }
+      }
+
+      // Only check response.ok for non-409 errors
+      if (!response.ok) {
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch {
+          errorData = { error: `HTTP ${response.status}: ${response.statusText}` };
+        }
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.error || 'API request failed');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error in joinRoom:', error);
+      throw error;
+    }
   }
 
-  static async updateParticipantStatus(roomId: string, username: string, isOnline: boolean): Promise<{ participant: ChatParticipant }> {
+  static async updateParticipantStatus(roomId: string, username: string, userId: string, isOnline: boolean): Promise<{ participant: ChatParticipant }> {
     return this.makeRequest('/api/chat/participants', {
       method: 'PUT',
-      body: JSON.stringify({ roomId, username, isOnline }),
+      body: JSON.stringify({ roomId, username, userId, isOnline }),
+    });
+  }
+
+  static async kickParticipant(roomId: string, targetUsername: string, adminUsername: string, adminUserId: string): Promise<{ message: string }> {
+    return this.makeRequest('/api/chat/participants', {
+      method: 'DELETE',
+      body: JSON.stringify({ roomId, targetUsername, adminUsername, adminUserId }),
     });
   }
 }
@@ -162,6 +207,16 @@ export const useSupabaseChat = (roomId: string): ChatState & ChatActions => {
     isLoading: false,
     error: null,
     lastMessageId: null,
+  });
+
+  // Simple user ID for anonymous users (no authentication needed)
+  const [userId] = useState<string>(() => {
+    // Generate UUID v4 compatible with browser environment
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
   });
 
   // Refs
@@ -204,9 +259,9 @@ export const useSupabaseChat = (roomId: string): ChatState & ChatActions => {
     try {
       setLoading(true);
       setError(null);
-      
+
       const { messages } = await ChatAPIClient.fetchMessages(roomIdRef, limit);
-      
+
       if (isMountedRef.current) {
         setState(prev => ({
           ...prev,
@@ -228,9 +283,9 @@ export const useSupabaseChat = (roomId: string): ChatState & ChatActions => {
 
     try {
       setError(null);
-      
+
       const { participants } = await ChatAPIClient.fetchParticipants(roomIdRef);
-      
+
       if (isMountedRef.current) {
         setState(prev => ({ ...prev, participants }));
       }
@@ -242,19 +297,25 @@ export const useSupabaseChat = (roomId: string): ChatState & ChatActions => {
 
   // Send message with error handling
   const sendMessage = useCallback(async (
-    username: string, 
-    message: string, 
+    message: string,
+    username: string,
     messageType: 'text' | 'system' | 'file' = 'text'
   ): Promise<ChatMessage> => {
     if (!roomIdRef) {
       throw new Error('Room ID is required');
     }
 
+    if (!username?.trim()) {
+      const errMsg = 'Username is required';
+      setError(createError('USERNAME_REQUIRED', errMsg));
+      throw new Error(errMsg);
+    }
+
     try {
       setError(null);
-      
-      const { message: newMessage } = await ChatAPIClient.sendMessage(roomIdRef, username, message, messageType);
-      
+
+      const { message: newMessage } = await ChatAPIClient.sendMessage(roomIdRef, username, userId, message, messageType);
+
       return newMessage;
     } catch (error) {
       console.error('Error sending message:', error);
@@ -262,7 +323,7 @@ export const useSupabaseChat = (roomId: string): ChatState & ChatActions => {
       setError(chatError);
       throw error;
     }
-  }, [roomIdRef, setError]);
+  }, [roomIdRef, setError, userId]);
 
   // Join room with error handling
   const joinRoom = useCallback(async (username: string): Promise<ChatParticipant> => {
@@ -270,11 +331,17 @@ export const useSupabaseChat = (roomId: string): ChatState & ChatActions => {
       throw new Error('Room ID is required');
     }
 
+    if (!username?.trim()) {
+      const errMsg = 'Username is required';
+      setError(createError('USERNAME_REQUIRED', errMsg));
+      throw new Error(errMsg);
+    }
+
     try {
       setError(null);
-      
-      const { participant } = await ChatAPIClient.joinRoom(roomIdRef, username);
-      
+
+      const { participant } = await ChatAPIClient.joinRoom(roomIdRef, username, userId);
+
       return participant;
     } catch (error) {
       console.error('Error joining room:', error);
@@ -282,7 +349,7 @@ export const useSupabaseChat = (roomId: string): ChatState & ChatActions => {
       setError(chatError);
       throw error;
     }
-  }, [roomIdRef, setError]);
+  }, [roomIdRef, setError, userId]);
 
   // Update participant status with debouncing
   const updateParticipantStatus = useCallback(async (username: string, isOnline: boolean): Promise<ChatParticipant> => {
@@ -290,14 +357,46 @@ export const useSupabaseChat = (roomId: string): ChatState & ChatActions => {
       throw new Error('Room ID is required');
     }
 
+    if (!username?.trim()) {
+      const errMsg = 'Username is required';
+      setError(createError('USERNAME_REQUIRED', errMsg));
+      throw new Error(errMsg);
+    }
+
     try {
-      const { participant } = await ChatAPIClient.updateParticipantStatus(roomIdRef, username, isOnline);
+      const { participant } = await ChatAPIClient.updateParticipantStatus(roomIdRef, username, userId, isOnline);
       return participant;
     } catch (error) {
       console.error('Error updating participant status:', error);
       throw error;
     }
-  }, [roomIdRef]);
+  }, [roomIdRef, userId, setError]);
+
+  // Kick participant (admin only)
+  const kickParticipant = useCallback(async (targetUsername: string, adminUsername: string, adminUserId: string): Promise<void> => {
+    if (!roomIdRef) {
+      throw new Error('Room ID is required');
+    }
+
+    if (!targetUsername?.trim() || !adminUsername?.trim()) {
+      const errMsg = 'Target username and admin username are required';
+      setError(createError('USERNAME_REQUIRED', errMsg));
+      throw new Error(errMsg);
+    }
+
+    try {
+      setError(null);
+      await ChatAPIClient.kickParticipant(roomIdRef, targetUsername, adminUsername, adminUserId);
+      
+      // Refresh participants list
+      await fetchParticipants();
+    } catch (error) {
+      console.error('Error kicking participant:', error);
+      const chatError = createError('KICK_PARTICIPANT_FAILED', error instanceof Error ? error.message : 'Failed to kick participant');
+      setError(chatError);
+      throw error;
+    }
+  }, [roomIdRef, setError, fetchParticipants]);
 
   // Reconnect function
   const reconnect = useCallback(async () => {
@@ -306,10 +405,14 @@ export const useSupabaseChat = (roomId: string): ChatState & ChatActions => {
     try {
       console.log('Attempting to reconnect...');
       setConnected(false);
-      
+
       // Cleanup existing channel
       if (channelRef.current) {
-        channelRef.current.unsubscribe();
+        try {
+          channelRef.current.unsubscribe();
+        } catch (e) {
+          console.warn('Error unsubscribing channel during reconnect', e);
+        }
         channelRef.current = null;
       }
 
@@ -321,13 +424,13 @@ export const useSupabaseChat = (roomId: string): ChatState & ChatActions => {
 
       // Fetch fresh data
       await Promise.all([fetchMessages(), fetchParticipants()]);
-      
+
       // Re-establish real-time connection
       setupRealtimeConnection();
     } catch (error) {
       console.error('Reconnection failed:', error);
       setError(createError('RECONNECT_FAILED', 'Failed to reconnect'));
-      
+
       // Schedule another reconnection attempt
       reconnectTimeoutRef.current = setTimeout(reconnect, RECONNECT_DELAY);
     }
@@ -348,24 +451,24 @@ export const useSupabaseChat = (roomId: string): ChatState & ChatActions => {
             table: 'chat_messages',
             filter: `room_id=eq.${roomIdRef}`,
           },
-                     (payload: RealtimePostgresChangesPayload<any>) => {
-             const newMessage = payload.new;
-             if (newMessage && isMountedRef.current) {
-               setState(prev => ({
-                 ...prev,
-                 messages: [...prev.messages, {
-                   id: newMessage.id,
-                   roomId: newMessage.room_id,
-                   username: newMessage.username,
-                   message: newMessage.message,
-                   messageType: newMessage.message_type as 'text' | 'system' | 'file',
-                   createdAt: newMessage.created_at,
-                   userId: newMessage.user_id,
-                 }],
-                 lastMessageId: newMessage.id,
-               }));
-             }
-           }
+          (payload: RealtimePostgresChangesPayload<any>) => {
+            const newMessage = payload.new;
+            if (newMessage && isMountedRef.current) {
+              setState(prev => ({
+                ...prev,
+                messages: [...prev.messages, {
+                  id: newMessage.id,
+                  roomId: newMessage.room_id,
+                  username: newMessage.username,
+                  message: newMessage.message,
+                  messageType: newMessage.message_type as 'text' | 'system' | 'file',
+                  createdAt: newMessage.created_at,
+                  userId: newMessage.user_id,
+                }],
+                lastMessageId: newMessage.id,
+              }));
+            }
+          }
         )
         .on(
           'postgres_changes',
@@ -375,23 +478,23 @@ export const useSupabaseChat = (roomId: string): ChatState & ChatActions => {
             table: 'chat_participants',
             filter: `room_id=eq.${roomIdRef}`,
           },
-                     (payload: RealtimePostgresChangesPayload<any>) => {
-             const newParticipant = payload.new;
-             if (newParticipant && isMountedRef.current) {
-               setState(prev => ({
-                 ...prev,
-                 participants: [...prev.participants, {
-                   id: newParticipant.id,
-                   roomId: newParticipant.room_id,
-                   username: newParticipant.username,
-                   joinedAt: newParticipant.joined_at,
-                   lastSeen: newParticipant.last_seen,
-                   isOnline: newParticipant.is_online,
-                   userId: newParticipant.user_id,
-                 }],
-               }));
-             }
-           }
+          (payload: RealtimePostgresChangesPayload<any>) => {
+            const newParticipant = payload.new;
+            if (newParticipant && isMountedRef.current) {
+              setState(prev => ({
+                ...prev,
+                participants: [...prev.participants, {
+                  id: newParticipant.id,
+                  roomId: newParticipant.room_id,
+                  username: newParticipant.username,
+                  joinedAt: newParticipant.joined_at,
+                  lastSeen: newParticipant.last_seen,
+                  isOnline: newParticipant.is_online,
+                  userId: newParticipant.user_id,
+                }],
+              }));
+            }
+          }
         )
         .on(
           'postgres_changes',
@@ -401,33 +504,51 @@ export const useSupabaseChat = (roomId: string): ChatState & ChatActions => {
             table: 'chat_participants',
             filter: `room_id=eq.${roomIdRef}`,
           },
-                     (payload: RealtimePostgresChangesPayload<any>) => {
-             const updatedParticipant = payload.new;
-             if (updatedParticipant && isMountedRef.current) {
-               setState(prev => ({
-                 ...prev,
-                 participants: prev.participants.map(p =>
-                   p.id === updatedParticipant.id
-                     ? {
-                         ...p,
-                         lastSeen: updatedParticipant.last_seen,
-                         isOnline: updatedParticipant.is_online,
-                       }
-                     : p
-                 ),
-               }));
-             }
-           }
+          (payload: RealtimePostgresChangesPayload<any>) => {
+            const updatedParticipant = payload.new;
+            if (updatedParticipant && isMountedRef.current) {
+              setState(prev => ({
+                ...prev,
+                participants: prev.participants.map(p =>
+                  p.id === updatedParticipant.id
+                    ? {
+                        ...p,
+                        lastSeen: updatedParticipant.last_seen,
+                        isOnline: updatedParticipant.is_online,
+                      }
+                    : p
+                ),
+              }));
+            }
+          }
         )
-                 .subscribe((status: string) => {
-           console.log(`Real-time connection status: ${status}`);
-           setConnected(status === 'SUBSCRIBED');
-           
-           if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-             console.warn('Real-time connection error, scheduling reconnection...');
-             reconnectTimeoutRef.current = setTimeout(reconnect, RECONNECT_DELAY);
-           }
-         });
+        .on(
+          'postgres_changes',
+          {
+            event: 'DELETE',
+            schema: 'public',
+            table: 'chat_participants',
+            filter: `room_id=eq.${roomIdRef}`,
+          },
+          (payload: RealtimePostgresChangesPayload<any>) => {
+            const deletedParticipant = payload.old as any;
+            if (deletedParticipant?.id && isMountedRef.current) {
+              setState(prev => ({
+                ...prev,
+                participants: prev.participants.filter(p => p.id !== deletedParticipant.id),
+              }));
+            }
+          }
+        )
+        .subscribe((status: string) => {
+          console.log(`Real-time connection status: ${status}`);
+          setConnected(status === 'SUBSCRIBED');
+
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            console.warn('Real-time connection error, scheduling reconnection...');
+            reconnectTimeoutRef.current = setTimeout(reconnect, RECONNECT_DELAY);
+          }
+        });
 
       channelRef.current = channel;
     } catch (error) {
@@ -436,38 +557,54 @@ export const useSupabaseChat = (roomId: string): ChatState & ChatActions => {
     }
   }, [roomIdRef, setConnected, setError, reconnect]);
 
-  // Initialize connection
+  // Initialize connection and fetch data
   useEffect(() => {
     if (!roomIdRef) return;
 
     isMountedRef.current = true;
-    
-    // Fetch initial data
-    fetchMessages();
-    fetchParticipants();
-    
+
+    // Fetch initial data with priority on participants
+    const initializeRoom = async () => {
+      try {
+        // Fetch participants first to establish current room state
+        await fetchParticipants();
+        // Then fetch messages
+        await fetchMessages();
+        
+        console.log('Room initialized with participants and messages');
+      } catch (error) {
+        console.error('Failed to initialize room:', error);
+      }
+    };
+
+    initializeRoom();
+
     // Setup real-time connection
     setupRealtimeConnection();
 
     // Cleanup function
     return () => {
       isMountedRef.current = false;
-      
+
       if (channelRef.current) {
-        channelRef.current.unsubscribe();
+        try {
+          channelRef.current.unsubscribe();
+        } catch (e) {
+          console.warn('Error unsubscribing channel on unmount', e);
+        }
         channelRef.current = null;
       }
-      
+
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = null;
       }
-      
+
       if (visibilityTimeoutRef.current) {
         clearTimeout(visibilityTimeoutRef.current);
         visibilityTimeoutRef.current = null;
       }
-      
+
       setConnected(false);
     };
   }, [roomIdRef, fetchMessages, fetchParticipants, setupRealtimeConnection, setConnected]);
@@ -477,13 +614,9 @@ export const useSupabaseChat = (roomId: string): ChatState & ChatActions => {
     const handleVisibilityChange = () => {
       if (!roomIdRef) return;
 
-      if (document.visibilityState === 'visible') {
-        // User came back to the page
-        updateParticipantStatus('current_user', true);
-      } else {
-        // User left the page
-        updateParticipantStatus('current_user', false);
-      }
+      // Note: We cannot reliably determine username here
+      // This functionality should be handled by the component using this hook
+      console.log('Visibility changed:', document.visibilityState);
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -491,20 +624,16 @@ export const useSupabaseChat = (roomId: string): ChatState & ChatActions => {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [roomIdRef, updateParticipantStatus]);
+  }, [roomIdRef]);
 
   // Handle window focus/blur
   useEffect(() => {
     const handleFocus = () => {
-      if (roomIdRef) {
-        updateParticipantStatus('current_user', true);
-      }
+      console.log('Window focused');
     };
 
     const handleBlur = () => {
-      if (roomIdRef) {
-        updateParticipantStatus('current_user', false);
-      }
+      console.log('Window blurred');
     };
 
     window.addEventListener('focus', handleFocus);
@@ -514,16 +643,17 @@ export const useSupabaseChat = (roomId: string): ChatState & ChatActions => {
       window.removeEventListener('focus', handleFocus);
       window.removeEventListener('blur', handleBlur);
     };
-  }, [roomIdRef, updateParticipantStatus]);
+  }, [roomIdRef]);
 
   return {
     ...state,
     sendMessage,
     joinRoom,
     updateParticipantStatus,
+    kickParticipant,
     fetchMessages,
     fetchParticipants,
     reconnect,
     clearError,
   };
-}; 
+};

@@ -2,7 +2,7 @@ name: Cleanup Expired Files v2
 
 on:
   schedule:
-    - cron: '0 * * * *' # every hour , minute ,hour ,day of month,  month , day of week
+    - cron: '0 * * * *' # every hour -- minute ,hour ,day of month,  month , day of week
   workflow_dispatch:
 
 jobs:

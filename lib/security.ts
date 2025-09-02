@@ -34,8 +34,9 @@ export const verifyToken = (token: string): any => {
 
 // Generate unique IDs
 export const generateId = (length: number = 21): string => {
-  return nanoid(length);
-};  // was giving error so switching to randomUUID
+  // Generate proper UUID format for database compatibility
+  return crypto.randomUUID();
+};
 
 // export function generateId() {
 //   return randomUUID();

@@ -142,36 +142,39 @@ export class RateLimiter {
   }
 }
 
+// Configuration constants
+const ROOM_CREATION_LIMIT = 9999; // Maximum number of rooms that can be created per window
+
 // Default rate limiter instances
 export const defaultRateLimiter = new RateLimiter({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'), // 15 minutes
   maxRequests: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100')
 });
 
-// Optimized rate limiter for room creation - more generous
+// Room creation rate limiter - effectively no limit
 export const roomCreationRateLimiter = new RateLimiter({
-  windowMs: 300000, // 5 minutes
-  maxRequests: 20, // Allow 20 room creations per 5 minutes
+  windowMs: 0, // 5 minutes
+  maxRequests: ROOM_CREATION_LIMIT, // No practical limit
   keyPrefix: 'room_creation'
 });
 
 // Less strict rate limiter for general API endpoints
 export const strictRateLimiter = new RateLimiter({
-  windowMs: 300000, // 5 minutes (increased from 1 minute)
+  windowMs: 300000, // 5 minutes (increased from 1 minute) for dev purposes it is 0
   maxRequests: 30, // Increased from 10 to 30 requests per 5 minutes
   keyPrefix: 'strict'
 });
 
 // Rate limiter for file uploads
 export const fileUploadRateLimiter = new RateLimiter({
-  windowMs: 300000, // 5 minutes
+  windowMs: 10000, // 5 minutes
   maxRequests: 20,
   keyPrefix: 'file_upload'
 });
 
 // Rate limiter for chat messages
 export const chatMessageRateLimiter = new RateLimiter({
-  windowMs: 60000, // 1 minute
+  windowMs: 10000, // 1 minute
   maxRequests: 50, // Allow 50 messages per minute
   keyPrefix: 'chat_messages'
 });

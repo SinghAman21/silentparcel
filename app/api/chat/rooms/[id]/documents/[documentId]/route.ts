@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
+import * as crypto from 'crypto';
 
 export async function GET(
   request: NextRequest,
@@ -35,7 +36,18 @@ export async function GET(
     console.log('chat - get document complete');
     return NextResponse.json({
       success: true,
-      document
+      document: {
+        id: document.id,
+        roomId: document.room_id,
+        documentName: document.document_name,
+        language: document.language,
+        content: document.content,
+        createdAt: document.created_at,
+        updatedAt: document.updated_at,
+        createdBy: document.created_by,
+        lastEditedBy: document.last_edited_by,
+        isActive: document.is_active
+      }
     });
 
   } catch (error) {
@@ -54,7 +66,7 @@ export async function PUT(
 ) {
   try {
     const { id: roomId, documentId } = await params;
-    const { content, language, documentName } = await request.json();
+    const { content, language, documentName, userId, lastEditedBy } = await request.json();
 
     if (!roomId || !documentId) {
       return NextResponse.json(
@@ -68,6 +80,11 @@ export async function PUT(
     if (content !== undefined) updateData.content = content;
     if (language !== undefined) updateData.language = language;
     if (documentName !== undefined) updateData.document_name = documentName;
+    
+    // Track who last edited the document
+    if (lastEditedBy || userId) {
+      updateData.last_edited_by = lastEditedBy || userId || crypto.randomUUID();
+    }
 
     if (Object.keys(updateData).length === 0) {
       console.log('chat - update document failed (no fields to update)');
@@ -98,7 +115,18 @@ export async function PUT(
     console.log('chat - update document complete');
     return NextResponse.json({
       success: true,
-      document
+      document: {
+        id: document.id,
+        roomId: document.room_id,
+        documentName: document.document_name,
+        language: document.language,
+        content: document.content,
+        createdAt: document.created_at,
+        updatedAt: document.updated_at,
+        createdBy: document.created_by,
+        lastEditedBy: document.last_edited_by,
+        isActive: document.is_active
+      }
     });
 
   } catch (error) {

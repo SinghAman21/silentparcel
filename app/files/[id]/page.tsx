@@ -116,7 +116,7 @@ function TreeCheckbox({
 }
 
 import { easeInOut, easeIn } from "motion";
-import FilesSkeleton from "@/components/files-skeleton";
+import FilesSkeleton from "@/components/files/files-skeleton";
 
 const fadeIn = {
 	hidden: { opacity: 0, y: 16 },

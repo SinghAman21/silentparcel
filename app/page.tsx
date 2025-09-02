@@ -428,13 +428,13 @@ export default function Home() {
 									Upload file
 								</Button>
 							</Link>
-							<Link href="/">
+							<Link href="/rooms">
 								<Button
 									size={"lg"}
 									className=" bg-muted hover:bg-muted/80 text-foreground rounded-lg font-medium border border-border transition-all duration-200 hover:scale-[1.02]"
 								>
 									<MessageSquare className="mr-2 h-4 w-4 " />
-									{/*Create room*/} Coming Soon
+									Create room 
 								</Button>
 							</Link>
 							{/* <Link href="/rooms/create">
@@ -447,7 +447,6 @@ export default function Home() {
 								{/* </Button>
 							</Link> */}
 						</div>
-
 
                         {/* Stable server placeholder; dynamic badge mounts on client */}
                         <HydrationSafe

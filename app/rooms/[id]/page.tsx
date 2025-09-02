@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, use } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Shield, AlertTriangle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,8 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import ThemeToggle from "@/components/theme-toggle";
 import Link from "next/link";
-import { SupabaseChatInterface } from "@/components/supabase-chat-interface";
-import { CollaborativeCodeInterface } from "@/components/collaborative-code-interface";
+import { SupabaseChatInterface } from "@/components/rooms/supabase-chat-interface";
+import { CollaborativeCodeInterface } from "@/components/rooms/collaborative-code-interface";
 import { useToast } from "@/hooks/use-toast";
 import { useCallback } from "react";
 
@@ -28,11 +28,10 @@ interface RoomInfo {
   codeDocumentCount: number;
 }
 
-export default function ChatRoomPage() {
+export default function ChatRoomPage({ searchParams }: { searchParams: Promise<{ admin?: string, name?: string }> }) {
 	const params = useParams();
 	const router = useRouter();
 	const { toast } = useToast();
-	const [password, setPassword] = useState("");
 	const [username, setUsername] = useState("");
 	const [isAuthenticated, setIsAuthenticated] = useState(false);
 	const [error, setError] = useState("");
@@ -41,8 +40,13 @@ export default function ChatRoomPage() {
 	const [isCheckingRoom, setIsCheckingRoom] = useState(true);
 	const [userData, setUserData] = useState<any>(null);
 	const [roomInfo, setRoomInfo] = useState<RoomInfo | null>(null);
+	const [isFirstUser, setIsFirstUser] = useState(false);
 
 	const roomId = params.id as string;
+	
+	// Use React.use() to handle the searchParams promise
+	const resolvedSearchParams = use(searchParams);
+	const roomNameFromUrl = resolvedSearchParams?.name ? decodeURIComponent(resolvedSearchParams.name) : null;
 
 	const checkRoomExists = useCallback(async () => {
 		try {
@@ -52,6 +56,9 @@ export default function ChatRoomPage() {
 			if (data.success) {
 				setRoomInfo(data.room);
 				setRoomExists(true);
+				
+				// Check if this user will be the first user (admin)
+				setIsFirstUser(data.room.participantCount === 0);
 			} else {
 				setRoomExists(false);
 			}
@@ -65,51 +72,85 @@ export default function ChatRoomPage() {
 
 	useEffect(() => {
 		checkRoomExists();
-	}, [roomId, checkRoomExists]);
+	}, [checkRoomExists]);
 
 	const handleJoinRoom = async () => {
-		if (!password.trim()) {
-			toast({
-				title: "Error",
-				description: "Please enter a room password",
-				variant: "destructive",
-			});
-			return;
-		}
-
 		setIsLoading(true);
 		setError("");
 
 		try {
-			// Verify room and join via API
-			const response = await fetch("/api/chat/rooms/verify", {
-				method: "POST",
+			// Generate username if not provided (only when user actually joins)
+			let finalUsername = username.trim() || `user_${Math.random().toString(36).substr(2, 6)}`;
+			let isGeneratedUsername = false;
+			
+			// First attempt to register with provided/generated username
+			let registerResponse = await fetch('/api/chat/participants', {
+				method: 'POST',
 				headers: {
-					"Content-Type": "application/json",
+					'Content-Type': 'application/json',
 				},
 				body: JSON.stringify({
 					roomId,
-					password: password.trim(),
-					username: username.trim() || undefined,
+					username: finalUsername,
+					userId: self.crypto.randomUUID()
 				}),
 			});
 
-			const data = await response.json();
+			// Handle username conflict
+			if (registerResponse.status === 409) {
+				const conflictData = await registerResponse.json();
+				
+				if (conflictData.code === 'USERNAME_EXISTS') {
+					// Generate a random username to resolve conflict
+					finalUsername = `user_${Math.random().toString(36).substr(2, 6)}`;
+					isGeneratedUsername = true;
+					
+					// Try again with generated username
+					registerResponse = await fetch('/api/chat/participants', {
+						method: 'POST',
+						headers: {
+							'Content-Type': 'application/json',
+						},
+						body: JSON.stringify({
+							roomId,
+							username: finalUsername,
+							userId: self.crypto.randomUUID()
+						}),
+					});
+				}
+			}
 
-			if (data.success) {
-				setIsAuthenticated(true);
-				setUserData(data.user);
-				setError("");
+			if (!registerResponse.ok) {
+				const errorData = await registerResponse.json();
+				throw new Error(errorData.error || 'Failed to join room');
+			}
+
+			const registrationData = await registerResponse.json();
+			console.log('User registered in chat_participants:', registrationData);
+			
+			// Create user data with admin status if first user
+			const newUserData = {
+				roomId,
+				username: finalUsername,
+				isAdmin: isFirstUser // First user becomes admin
+			};
+
+			// Set user data after successful backend registration
+			setUserData(newUserData);
+			setIsAuthenticated(true);
+			setError("");
+			
+			// Show appropriate success message
+			if (isGeneratedUsername) {
+				toast({
+					title: "Username Changed",
+					description: `That username already exists! You've been assigned: ${finalUsername}`,
+					variant: "default",
+				});
+			} else {
 				toast({
 					title: "Success",
 					description: "Successfully joined the room!",
-				});
-			} else {
-				setError(data.error || "Invalid room ID or password");
-				toast({
-					title: "Error",
-					description: data.error || "Failed to join room",
-					variant: "destructive",
 				});
 			}
 		} catch (error) {
@@ -117,7 +158,7 @@ export default function ChatRoomPage() {
 			setError("Failed to join room. Please try again.");
 			toast({
 				title: "Error",
-				description: "Failed to join room. Please try again.",
+				description: error instanceof Error ? error.message : "Failed to join room. Please try again.",
 				variant: "destructive",
 			});
 		} finally {
@@ -210,7 +251,7 @@ export default function ChatRoomPage() {
 						<CardHeader>
 							<CardTitle className="flex items-center">
 								<Shield className="h-5 w-5 mr-2" />
-								Join {roomInfo?.roomType === 'code' ? 'Code' : roomInfo?.roomType === 'mixed' ? 'Mixed' : 'Chat'} Room
+								Join {roomInfo?.roomType === 'code' ? 'Code' : 'Chat'} Room
 							</CardTitle>
 						</CardHeader>
 						<CardContent className="space-y-4">
@@ -218,20 +259,9 @@ export default function ChatRoomPage() {
 								<Label htmlFor="username">Username (Optional)</Label>
 								<Input
 									id="username"
-									placeholder="Anonymous User"
+									placeholder="Enter username or leave blank for auto-generated"
 									value={username}
 									onChange={(e) => setUsername(e.target.value)}
-									className="bg-background/50"
-								/>
-							</div>
-							<div className="space-y-2">
-								<Label htmlFor="password">Room Password</Label>
-								<Input
-									id="password"
-									type="password"
-									placeholder="Enter room password"
-									value={password}
-									onChange={(e) => setPassword(e.target.value)}
 									className="bg-background/50"
 									onKeyDown={(e) => e.key === "Enter" && handleJoinRoom()}
 								/>
@@ -248,7 +278,7 @@ export default function ChatRoomPage() {
 										Joining...
 									</>
 								) : (
-									`Join ${roomInfo?.roomType === 'code' ? 'Code' : roomInfo?.roomType === 'mixed' ? 'Mixed' : 'Chat'} Room`
+									`Join Room`
 								)}
 							</Button>
 						</CardContent>
@@ -260,16 +290,16 @@ export default function ChatRoomPage() {
 
 	// Render appropriate interface based on room type
 	const renderInterface = () => {
-		if (roomInfo?.roomType === 'code' || roomInfo?.roomType === 'mixed') {
+		if (roomInfo?.roomType === 'code') {
 			return (
 				<CollaborativeCodeInterface
 					roomId={roomId}
-					roomPassword={password}
+					roomPassword={roomId}
 					userData={userData}
+					roomName={roomNameFromUrl || roomInfo?.name}
 					onLeave={() => {
 						setIsAuthenticated(false);
 						setUserData(null);
-						setPassword("");
 					}}
 				/>
 			);
@@ -277,12 +307,12 @@ export default function ChatRoomPage() {
 			return (
 				<SupabaseChatInterface
 					roomId={roomId}
-					roomPassword={password}
+					roomPassword={roomId}
 					userData={userData}
+					roomName={roomNameFromUrl || roomInfo?.name}
 					onLeave={() => {
 						setIsAuthenticated(false);
 						setUserData(null);
-						setPassword("");
 					}}
 				/>
 			);

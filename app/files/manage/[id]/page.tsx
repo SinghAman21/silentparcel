@@ -27,7 +27,7 @@ import { Badge } from "@/components/ui/badge";
 import ThemeToggle from "@/components/theme-toggle";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { FileDropzone } from "@/components/file-dropzone";
+import { FileDropzone } from "@/components/files/file-dropzone";
 import Link from "next/link";
 import {
 	Accordion,
@@ -46,7 +46,7 @@ import {
 	AlertDialogTitle,
 	AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import FilesSkeleton from "@/components/files-skeleton";
+import FilesSkeleton from "@/components/files/files-skeleton";
 
 interface Subfile {
 	file_name: string;

@@ -7,7 +7,6 @@ Disallow: /_next/
 Disallow: /admin/
 Disallow: /private/
 Disallow: /terms/
-Disallow: /rooms/
 
 
 
@@ -16,6 +15,7 @@ Allow: /files/
 Allow: /security/
 Allow: /privacy/
 Allow: /opensource/
+Allow: /rooms/
 
 # Sitemap location
 Sitemap: https://silentparcel.com/sitemap.xml
