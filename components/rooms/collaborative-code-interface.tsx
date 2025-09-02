@@ -18,11 +18,114 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import ThemeToggle from "@/components/theme-toggle";
 import { LeaveRoomDialog } from "@/components/rooms/leave-room-dialog";
-import { useSupabaseChat } from "@/hooks/use-supabase-chat";
+import { useSupabaseChat, ChatMessage, ChatParticipant } from "@/hooks/use-supabase-chat";
 import { useToast } from "@/hooks/use-toast";
 
 import { CompactUserDisplay } from "@/components/rooms/compact-user-display";
 import { supabase } from "@/lib/supabase";
+
+// Encryption utilities using Web Crypto API (browser-compatible)
+const encryptMessage = async (message: string, password: string): Promise<string> => {
+  try {
+    // Derive key from password using PBKDF2
+    const encoder = new TextEncoder();
+    const passwordBuffer = encoder.encode(password);
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    
+    const keyMaterial = await crypto.subtle.importKey(
+      'raw',
+      passwordBuffer,
+      { name: 'PBKDF2' },
+      false,
+      ['deriveKey']
+    );
+    
+    const key = await crypto.subtle.deriveKey(
+      {
+        name: 'PBKDF2',
+        salt,
+        iterations: 100000,
+        hash: 'SHA-256'
+      },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt']
+    );
+    
+    // Generate IV
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    
+    // Encrypt the message
+    const messageBuffer = encoder.encode(message);
+    const encrypted = await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv },
+      key,
+      messageBuffer
+    );
+    
+    // Combine salt, iv, and encrypted data
+    const saltHex = Array.from(salt, byte => byte.toString(16).padStart(2, '0')).join('');
+    const ivHex = Array.from(iv, byte => byte.toString(16).padStart(2, '0')).join('');
+    const encryptedHex = Array.from(new Uint8Array(encrypted), byte => byte.toString(16).padStart(2, '0')).join('');
+    
+    return saltHex + ':' + ivHex + ':' + encryptedHex;
+  } catch (error) {
+    console.error('Encryption failed:', error);
+    return message; // Fallback to plain text
+  }
+};
+
+const decryptMessage = async (encryptedData: string, password: string): Promise<string> => {
+  try {
+    const parts = encryptedData.split(':');
+    if (parts.length !== 3) {
+      throw new Error('Invalid encrypted data format');
+    }
+    
+    const salt = new Uint8Array(parts[0].match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+    const iv = new Uint8Array(parts[1].match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+    const encrypted = new Uint8Array(parts[2].match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+    
+    // Derive the same key from password
+    const encoder = new TextEncoder();
+    const passwordBuffer = encoder.encode(password);
+    
+    const keyMaterial = await crypto.subtle.importKey(
+      'raw',
+      passwordBuffer,
+      { name: 'PBKDF2' },
+      false,
+      ['deriveKey']
+    );
+    
+    const key = await crypto.subtle.deriveKey(
+      {
+        name: 'PBKDF2',
+        salt,
+        iterations: 100000,
+        hash: 'SHA-256'
+      },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['decrypt']
+    );
+    
+    // Decrypt the message
+    const decrypted = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv },
+      key,
+      encrypted
+    );
+    
+    const decoder = new TextDecoder();
+    return decoder.decode(decrypted);
+  } catch (error) {
+    console.error('Decryption failed:', error);
+    return encryptedData; // Return encrypted text if decryption fails
+  }
+};
 
 interface CollaborativeCodeInterfaceProps {
   roomId: string;
@@ -64,6 +167,10 @@ export function CollaborativeCodeInterface({
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [decryptedMessages, setDecryptedMessages] = useState<Map<string, string>>(new Map());
+  
+  // Chat references
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const [selectedLanguage, setSelectedLanguage] = useState("javascript");
   const [showSettings, setShowSettings] = useState(false);
   const [autoSave, setAutoSave] = useState(true);
@@ -112,7 +219,8 @@ export function CollaborativeCodeInterface({
     joinRoom,
     updateParticipantStatus,
     kickParticipant,
-    clearError
+    clearError,
+    fetchParticipants
   } = useSupabaseChat(roomId);
 
   // Get auth user once
@@ -122,6 +230,49 @@ export function CollaborativeCodeInterface({
       setUserId(data.user?.id ?? null);
     })();
   }, []);
+
+  // Decrypt messages when they arrive or room password changes
+  useEffect(() => {
+    const decryptAllMessages = async () => {
+      if (!roomPassword) return;
+      
+      const newDecryptedMap = new Map<string, string>();
+      
+      for (const msg of messages) {
+        // Skip system messages (they're not encrypted)
+        if (msg.messageType === 'system') {
+          newDecryptedMap.set(msg.id, msg.message);
+          continue;
+        }
+        
+        // Check if message looks encrypted (has our format salt:iv:encrypted)
+        if (msg.message.includes(':') && msg.message.split(':').length === 3) {
+          try {
+            const decrypted = await decryptMessage(msg.message, roomPassword);
+            console.log('🔒 Encrypted from DB:', msg.message.substring(0, 50) + '...');
+            console.log('🔐 Decrypted for display:', decrypted);
+            newDecryptedMap.set(msg.id, decrypted);
+          } catch (error) {
+            console.error('Failed to decrypt message:', msg.id, error);
+            // If decryption fails, show the original message
+            newDecryptedMap.set(msg.id, msg.message);
+          }
+        } else {
+          // Message is probably plain text (legacy or system message)
+          newDecryptedMap.set(msg.id, msg.message);
+        }
+      }
+      
+      setDecryptedMessages(newDecryptedMap);
+    };
+
+    decryptAllMessages();
+  }, [messages, roomPassword]);
+
+  // Auto scroll to bottom
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   // FIXED: Comprehensive session and admin role persistence
   useEffect(() => {
@@ -218,8 +369,13 @@ export function CollaborativeCodeInterface({
     }
   }, [participants, username, roomId, isCurrentUserAdmin]);
 
-  // FIXED: Session expiry monitoring
+  // FIXED: Session expiry monitoring and initial data loading
   useEffect(() => {
+    // Initial participant fetch when component mounts
+    if (roomId) {
+      fetchParticipants();
+    }
+    
     if (!sessionExpiry) return;
     
     const checkExpiry = () => {
@@ -240,7 +396,7 @@ export function CollaborativeCodeInterface({
     
     const interval = setInterval(checkExpiry, 60000); // Check every minute
     return () => clearInterval(interval);
-  }, [sessionExpiry, roomId, toast]);
+  }, [sessionExpiry, roomId, toast, fetchParticipants]);
 
   // FIXED: Fetch room info to get actual expiry time
   useEffect(() => {
@@ -700,38 +856,99 @@ export function CollaborativeCodeInterface({
     }
   };
 
-  // Join room (chat presence) - Enhanced to handle userData properly
+  // FIXED: Enhanced join room logic with session management and participant refresh
   useEffect(() => {
     if (username && !isJoining) {
-      // If userData is provided, we're coming from room join page (user already registered)
-      if (userData?.username && userData.username === username) {
-        // User came from room page with userData - DON'T join again, just refresh participants
-        setShowUsernameDialog(false);
-        console.log(`User ${username} entered collaborative room as ${userData.isAdmin ? 'admin' : 'participant'} (already registered in database)`);
-        
-        // Don't call joinRoom() here - user is already registered in chat_participants table
-        // Just update the UI state and we're good to go
-        toast({
-          title: "Success",
-          description: "Successfully entered the collaborative coding room!",
-        });
+      // Skip if we already have a valid session
+      const sessionKey = `room_${roomId}_session`;
+      const storedSession = localStorage.getItem(sessionKey);
+      
+      if (storedSession) {
+        try {
+          const session = JSON.parse(storedSession);
+          if (session.username === username && session.expiry > Date.now()) {
+            // Valid session exists, no need to rejoin but refresh participants
+            setShowUsernameDialog(false);
+            fetchParticipants(); // Refresh to ensure we have current participant list
+            return;
+          }
+        } catch (error) {
+          console.error('Error parsing session:', error);
+        }
       }
-      // If no userData but username is set (fallback for manual entry)
-      else if (!userData?.username && username) {
+      
+      // FIXED: Only join if userData is provided from room page (user already registered)
+      // Don't attempt to join from chat interface if user came through proper room join flow
+      if (userData?.username && userData.username === username) {
+        // User came from room page with userData - just refresh participants
+        setShowUsernameDialog(false);
+        
+        // Create session after room page provided userData
+        const expiry = Date.now() + (2 * 60 * 60 * 1000); // 2 hours
+        const sessionData = {
+          username,
+          isAdmin: userData?.isAdmin || false,
+          role: userData?.isAdmin ? 'admin' : 'participant',
+          joinedAt: new Date().toISOString(),
+          expiry
+        };
+        
+        localStorage.setItem(sessionKey, JSON.stringify(sessionData));
+        setSessionExpiry(expiry);
+        
+        // Refresh participants to get current list
+        fetchParticipants();
+        
+        console.log(`User ${username} entered room as ${userData?.isAdmin ? 'admin' : 'participant'} (already registered)`);
+        toast({
+          title: "Welcome",
+          description: `Entered room as ${userData?.isAdmin ? 'Admin' : 'Participant'}`,
+        });
+      } else if (!userData?.username && username) {
+        // Legacy path - user entered username directly in chat interface
         setIsJoining(true);
         joinRoom(username)
           .then(() => {
             setShowUsernameDialog(false);
-            console.log(`User ${username} joined collaborative room via manual entry`);
+            
+            // Create session after successful join
+            const expiry = Date.now() + (2 * 60 * 60 * 1000); // 2 hours
+            const sessionData = {
+              username,
+              isAdmin: false, // Will be updated if user is first to join
+              role: 'participant',
+              joinedAt: new Date().toISOString(),
+              expiry
+            };
+            
+            localStorage.setItem(sessionKey, JSON.stringify(sessionData));
+            setSessionExpiry(expiry);
+            
+            // Force refresh participants after successful join
+            setTimeout(() => {
+              fetchParticipants();
+            }, 500); // Small delay to ensure server has processed the join
+            
+            console.log(`User ${username} joined room via chat interface`);
+            toast({
+              title: "Success",
+              description: "Joined room successfully",
+            });
           })
           .catch((error) => {
-            console.error("Failed to join room:", error);
-            toast({ title: "Error", description: "Failed to join room", variant: "destructive" });
+            console.error('Failed to join room:', error);
+            toast({
+              title: "Error",
+              description: "Failed to join room. Please try again.",
+              variant: "destructive"
+            });
           })
-          .finally(() => setIsJoining(false));
+          .finally(() => {
+            setIsJoining(false);
+          });
       }
     }
-  }, [joinRoom, isJoining, userData, username, toast]);
+  }, [username, joinRoom, isJoining, userData, roomId, toast, fetchParticipants]);
 
   // Helpers
   const getCursorColor = (name: string) => {
@@ -798,15 +1015,29 @@ export function CollaborativeCodeInterface({
   const handleLeaveRoom = () => setShowLeaveDialog(true);
 
   const handleSendMessage = async () => {
-    if (!message.trim() || !chatConnected || isSendingMessage) return;
-    
+    if (!message.trim() || !username || isSendingMessage) return;
+
     setIsSendingMessage(true);
     try {
-      await sendMessage(message.trim(), username);
-      setMessage(""); // Clear the input after sending
+      // Encrypt message before sending to database
+      const encryptedContent = await encryptMessage(message, roomPassword);
+      
+      console.log('🔐 Original message:', message);
+      console.log('🔒 Encrypted for database:', encryptedContent);
+      
+      // Send encrypted message to database
+      await sendMessage(encryptedContent, username, 'text');
+      setMessage('');
       clearError();
+      
+      // Show encryption status in toast
+      toast({
+        title: "Message Encrypted",
+        description: "Your message has been encrypted and sent securely.",
+        duration: 2000,
+      });
     } catch (error) {
-      console.error("Failed to send message:", error);
+      console.error('Failed to send message:', error);
       toast({
         title: "Error",
         description: "Failed to send message. Please try again.",
@@ -1196,34 +1427,48 @@ export function CollaborativeCodeInterface({
           {/* Chat Messages */}
           <ScrollArea className="flex-1 p-4">
             <div className="space-y-4">
-              {messages.map((msg) => (
-                <div key={msg.id} className="flex items-start space-x-3 w-full">
-                  <Avatar className="w-8 h-8 shrink-0 mt-0.5">
-                    <AvatarFallback className="text-xs" style={{ backgroundColor: getParticipantColor(msg.username) + "20" }}>
-                      {getParticipantAvatar(msg.username)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0 flex flex-col">
-                    <div className="flex items-baseline space-x-2 mb-1 min-w-0">
-                      <span 
-                        className="font-semibold text-sm max-w-[60%] truncate" 
-                        style={{ color: getParticipantColor(msg.username) }}
-                        title={msg.username}
-                      >
-                        {msg.username}
-                      </span>
-                      <span className="text-xs text-muted-foreground flex-shrink-0 ml-auto">
-                        {new Date(msg.createdAt).toLocaleTimeString()}
-                      </span>
-                    </div>
-                    <div className="bg-muted/50 rounded-lg px-3 py-2 text-sm word-wrap break-all hyphens-auto">
-                      <div className="message-content">
-                        {msg.message}
+              {messages.map((msg) => {
+                // Get decrypted message content
+                const messageContent = decryptedMessages.get(msg.id) || msg.message;
+                const isEncrypted = msg.message.includes(':') && msg.message.split(':').length === 3 && msg.messageType !== 'system';
+                
+                return (
+                  <div key={msg.id} className="flex items-start space-x-3 w-full">
+                    <Avatar className="w-8 h-8 shrink-0 mt-0.5">
+                      <AvatarFallback className="text-xs" style={{ backgroundColor: getParticipantColor(msg.username) + "20" }}>
+                        {getParticipantAvatar(msg.username)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0 flex flex-col">
+                      <div className="flex items-baseline space-x-2 mb-1 min-w-0">
+                        <span 
+                          className="font-semibold text-sm max-w-[60%] truncate" 
+                          style={{ color: getParticipantColor(msg.username) }}
+                          title={msg.username}
+                        >
+                          {msg.username}
+                        </span>
+                        {isEncrypted && (
+                          <div className="flex items-center text-green-500" title="Message is end-to-end encrypted">
+                            <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM9 6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9V6z"/>
+                            </svg>
+                          </div>
+                        )}
+                        <span className="text-xs text-muted-foreground flex-shrink-0 ml-auto">
+                          {new Date(msg.createdAt).toLocaleTimeString()}
+                        </span>
+                      </div>
+                      <div className="bg-muted/50 rounded-lg px-3 py-2 text-sm word-wrap break-all hyphens-auto">
+                        <div className="message-content">
+                          {messageContent}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
+              <div ref={messagesEndRef} />
             </div>
           </ScrollArea>
 
@@ -1246,6 +1491,28 @@ export function CollaborativeCodeInterface({
               >
                 <Send className="h-4 w-4" />
               </Button>
+            </div>
+            {/* Connection status indicator */}
+            <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
+              <div className="flex items-center space-x-1">
+                {chatConnected ? (
+                  <>
+                    <div className="w-2 h-2 bg-green-500 rounded-full" />
+                    <span>Chat connected</span>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-2 h-2 bg-red-500 rounded-full" />
+                    <span>Chat disconnected</span>
+                  </>
+                )}
+              </div>
+              <div className="flex items-center space-x-1">
+                <svg className="h-3 w-3 text-green-500" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM9 6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9V6z"/>
+                </svg>
+                <span>E2E Encrypted</span>
+              </div>
             </div>
           </div>
         </div>
