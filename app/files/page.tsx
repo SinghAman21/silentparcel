@@ -123,7 +123,7 @@ export default function FilesPage() {
 		setUploadProgress(selectedFiles.map(() => 0));
 		setUploadError(null);
 
-		// Prepare FormData for all files at once
+		// Use traditional FormData upload method
 		const formData = new FormData();
 		selectedFiles.forEach((fileData) => {
 			formData.append("files", fileData.file);
@@ -139,7 +139,7 @@ export default function FilesPage() {
 		// Add maxDownloads to formData
 		formData.append(
 			"maxDownloads",
-			String(maxDownloadsEnabled ? maxDownloads : 10)
+			String(maxDownloadsEnabled ? maxDownloads[0] : 10)
 		);
 
 		try {
@@ -151,7 +151,7 @@ export default function FilesPage() {
 			if (res.ok && data.downloadUrl && data.editUrl) {
 				setVirusScanStatus(selectedFiles.map(() => "clean"));
 				setDownloadLinks([data.downloadUrl]);
-				setEditTokens([data.editUrl.split("/").pop()]);
+				setEditTokens([data.editUrl.split("/").pop() || '']);
 				setUploadProgress(selectedFiles.map(() => 100));
 				setTimeout(() => setStage("complete"), 500);
 			} else {
@@ -165,14 +165,14 @@ export default function FilesPage() {
 					// Handle other types of errors (size limits, network issues, etc.)
 					setVirusScanStatus(selectedFiles.map(() => null));
 					setUploadError(data.error || "Upload failed. Please try again.");
-					setStage("upload-error"); // Use new error stage
+					setStage("upload-error");
 				}
 			}
 		} catch (err: any) {
 			console.error('Upload error:', err);
 			setVirusScanStatus(selectedFiles.map(() => null));
 			setUploadError(err.message || "Network error during upload. Please try again.");
-			setStage("upload-error"); // Use new error stage
+			setStage("upload-error");
 		}
 	};
 
@@ -623,6 +623,7 @@ export default function FilesPage() {
 												<Loader2 className="h-5 w-5 sm:h-6 sm:w-6 animate-spin text-primary" />
 												<span>Uploading &amp; Virus Scanning</span>
 											</CardTitle>
+											
 										</CardHeader>
 										<CardContent className="space-y-5 sm:space-y-8 pt-0">
 											<div className="flex flex-col gap-3 sm:gap-5">
@@ -687,11 +688,11 @@ export default function FilesPage() {
 													</motion.div>
 												))}
 											</div>
-											<div className="flex justify-center mt-4 sm:mt-6">
+											<div className="flex flex-col items-center gap-2 mt-4 sm:mt-6">
 												<span className="text-xs sm:text-sm text-muted-foreground text-center">
-													Please keep this page open until upload &amp; scan
-													completes.
+													Please keep this page open until upload &amp; scan completes.
 												</span>
+												
 											</div>
 										</CardContent>
 									</Card>
