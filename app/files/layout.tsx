@@ -2,7 +2,7 @@ import { Metadata } from "next";
 
 export const metadata: Metadata = {
 	title: "Upload Files Securely | SilentParcel",
-	description: "Upload and share files securely with end-to-end encryption. Support for files up to 50MB with automatic virus scanning and password protection.",
+	description: "Upload and share files securely with end-to-end encryption. Support for up to 50MB ZIP archives with automatic virus scanning and password protection.",
 	keywords: [
 		"file upload",
 		"secure file sharing",
@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 	],
 	openGraph: {
 		title: "Upload Files Securely | SilentParcel",
-		description: "Upload and share files securely with end-to-end encryption. Support for files up to 50MB with automatic virus scanning.",
+		description: "Upload and share files securely with end-to-end encryption. Support for up to 50MB ZIP archives with automatic virus scanning.",
 		url: "https://silentparcel.com/files",
 		type: "website",
 	},

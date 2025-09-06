@@ -82,6 +82,20 @@ export const validateFileSize = (size: number, maxSize: number): boolean => {
   return size <= maxSize;
 };
 
+// Validate total ZIP size
+export const validateZipSize = (zipSize: number): { isValid: boolean; message?: string } => {
+  const maxSize = 50 * 1024 * 1024; // 50MB
+  
+  if (zipSize > maxSize) {
+    return {
+      isValid: false,
+      message: `ZIP file size (${formatFileSize(zipSize)}) exceeds the 50MB limit`
+    };
+  }
+  
+  return { isValid: true };
+};
+
 // IP address extraction
 // export const getClientIP = (req: any): string => {
 //   return req.headers['x-forwarded-for'] || 
@@ -106,6 +120,64 @@ export const getClientIP = (req: any): string => {
 // Generate avatar URL
 export const generateAvatarUrl = (seed: string): string => {
   return `https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}`;
+};
+
+// Calculate ZIP file size from files array (client-side compatible)
+export const calculateZipSize = async (files: File[]): Promise<number> => {
+  try {
+    // Since AdmZip doesn't work in the browser, we'll estimate the compressed size
+    // This is an approximation based on typical compression ratios
+    const totalUncompressedSize = files.reduce((total, file) => total + file.size, 0);
+    
+    // Estimate compression ratio based on file types
+    let estimatedCompressionRatio = 0.7; // Default 30% compression
+    
+    // Analyze file types to better estimate compression
+    const textTypes = ['text/', 'application/json', 'application/xml', 'application/javascript'];
+    const imageTypes = ['image/jpeg', 'image/png', 'image/gif'];
+    const videoTypes = ['video/', 'audio/'];
+    
+    let textFiles = 0, imageFiles = 0, videoFiles = 0, otherFiles = 0;
+    
+    files.forEach(file => {
+      if (textTypes.some(type => file.type.startsWith(type))) {
+        textFiles++;
+      } else if (imageTypes.some(type => file.type.startsWith(type))) {
+        imageFiles++;
+      } else if (videoTypes.some(type => file.type.startsWith(type))) {
+        videoFiles++;
+      } else {
+        otherFiles++;
+      }
+    });
+    
+    // Adjust compression ratio based on file types
+    if (textFiles > files.length * 0.5) {
+      estimatedCompressionRatio = 0.3; // Text compresses well (70% compression)
+    } else if (imageFiles > files.length * 0.5 || videoFiles > files.length * 0.5) {
+      estimatedCompressionRatio = 0.95; // Media files don't compress much (5% compression)
+    }
+    
+    // Add ZIP overhead (approximately 30 bytes per file + central directory)
+    const zipOverhead = files.length * 30 + 50;
+    
+    const estimatedZipSize = Math.round(totalUncompressedSize * estimatedCompressionRatio + zipOverhead);
+    
+    return estimatedZipSize;
+  } catch (error) {
+    console.error('Error estimating ZIP size:', error);
+    // Return sum of individual file sizes as fallback
+    return files.reduce((total, file) => total + file.size, 0);
+  }
+};
+
+// Format file size for display
+export const formatFileSize = (bytes: number): string => {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
 // Encryption/Decryption for sensitive data using secure AES-256-CBC

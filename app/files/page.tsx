@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
 	ArrowLeft,
 	Upload,
@@ -12,6 +12,7 @@ import {
 	Eye,
 	X,
 	Loader2,
+	Archive,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,6 +28,7 @@ import { CaptchaModal } from "@/components/captcha-modal";
 import { LinkResultModal } from "@/components/rooms/link-result-modal";
 import { AnimatePresence, motion } from "motion/react";
 import { Slider } from "@/components/ui/slider";
+import { calculateZipSize, formatFileSize } from "@/lib/security";
 import Script from "next/script";
 
 type UploadStage =
@@ -61,6 +63,8 @@ export default function FilesPage() {
 		useState<boolean>(false);
 	const [maxDownloads, setMaxDownloads] = useState<[number]>([10]);
 	const [showPassword, setShowPassword] = useState<boolean>(false);
+	const [zipSize, setZipSize] = useState<number>(0);
+	const [isCalculatingZipSize, setIsCalculatingZipSize] = useState<boolean>(false);
 
 	const handleFileSelect = useCallback((files: File[]) => {
 		setSelectedFiles((prev) => {
@@ -85,8 +89,34 @@ export default function FilesPage() {
 			);
 			return uniqueFiles;
 		});
-		// Don't reset progress/status here; let them be managed by upload logic
+	// Don't reset progress/status here; let them be managed by upload logic
 	}, []);
+
+	// Calculate ZIP size when files change
+	useEffect(() => {
+		const calculateSize = async () => {
+			if (selectedFiles.length === 0) {
+				setZipSize(0);
+				return;
+			}
+
+			setIsCalculatingZipSize(true);
+			try {
+				const files = selectedFiles.map(fileData => fileData.file);
+				const calculatedSize = await calculateZipSize(files);
+				setZipSize(calculatedSize);
+			} catch (error) {
+				console.error('Error calculating ZIP size:', error);
+				// Fallback to sum of individual file sizes
+				const fallbackSize = selectedFiles.reduce((total, file) => total + file.size, 0);
+				setZipSize(fallbackSize);
+			} finally {
+				setIsCalculatingZipSize(false);
+			}
+		};
+
+		calculateSize();
+	}, [selectedFiles]);
 
 	const uploadFilesToServer = async () => {
 		setVirusScanStatus(selectedFiles.map(() => "scanning"));
@@ -160,14 +190,7 @@ export default function FilesPage() {
 		setEditTokens([]);
 		setUploadError(null);
 		setPassword("");
-	};
-
-	const formatFileSize = (bytes: number) => {
-		if (bytes === 0) return "0 Bytes";
-		const k = 1024;
-		const sizes = ["Bytes", "KB", "MB", "GB"];
-		const i = Math.floor(Math.log(bytes) / Math.log(k));
-		return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+		setZipSize(0);
 	};
 
 	return (
@@ -181,7 +204,7 @@ export default function FilesPage() {
 						"@context": "https://schema.org",
 						"@type": "WebPage",
 						"name": "Upload Files Securely",
-						"description": "Upload and share files securely with end-to-end encryption. Support for files up to 50MB with automatic virus scanning and password protection.",
+						"description": "Upload and share files securely with end-to-end encryption. Support for up to 50MB ZIP archives with automatic virus scanning and password protection.",
 						"url": "https://silentparcel.com/files",
 						"breadcrumb": {
 							"@type": "BreadcrumbList",
@@ -271,7 +294,7 @@ export default function FilesPage() {
 									transition={{ delay: 0.15, duration: 0.4 }}
 								>
 									Securely share files up to{" "}
-									<span className="font-semibold">50MB</span> with automatic
+									<span className="font-semibold">50MB ZIP archive</span> with automatic
 									virus scanning.
 								</motion.p>
 							</div>
@@ -379,6 +402,42 @@ export default function FilesPage() {
 														bounce: 0.25,
 													}}
 												>
+													{/* ZIP Size Display */}
+													<motion.div
+														className="bg-muted/30 rounded-lg p-3 border border-border/40"
+														initial={{ opacity: 0, x: 24 }}
+														animate={{ opacity: 1, x: 0 }}
+														transition={{
+															delay: 0.1,
+															duration: 0.4,
+															type: "spring",
+														}}
+													>
+														<div className="flex items-center justify-between">
+															<div className="flex items-center gap-2">
+																<Archive className="h-4 w-4 text-primary" />
+																<span className="text-sm font-medium text-foreground">
+																	ZIP Archive Size
+																</span>
+															</div>
+															<div className="flex items-center gap-2">
+																{isCalculatingZipSize ? (
+																	<Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+																) : null}
+																<span className={`font-semibold ${
+																	zipSize > 50 * 1024 * 1024 ? 'text-destructive' : 'text-foreground'
+																}`}>
+																	{zipSize > 0 ? formatFileSize(zipSize) : 'Calculating...'}
+																</span>
+															</div>
+														</div>
+														{zipSize > 50 * 1024 * 1024 && (
+															<p className="text-xs text-destructive mt-2 flex items-center gap-1">
+																<AlertTriangle className="h-3 w-3" />
+																ZIP size exceeds 50MB limit. Please remove some files.
+															</p>
+														)}
+													</motion.div>
 													<motion.div
 														className="flex sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-3"
 														initial={{ opacity: 0, x: 24 }}
@@ -531,7 +590,7 @@ export default function FilesPage() {
 														className="w-full mt-2 rounded-xl text-base font-semibold py-2 sm:py-3 hover:scale-[1.03] transition"
 														disabled={selectedFiles.some(
 															(file) => file.size > 50 * 1024 * 1024
-														)}
+														) || zipSize > 50 * 1024 * 1024}
 														asChild
 													>
 														<span className="flex items-center justify-center gap-2">
