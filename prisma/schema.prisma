@@ -1,0 +1,163 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model audit_logs {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  action        String    @db.VarChar(50)
+  resource_type String    @db.VarChar(50)
+  resource_id   String    @db.VarChar(100)
+  user_id       String?   @db.VarChar(100)
+  ip_address    String?   @db.Inet
+  user_agent    String?
+  metadata      Json?
+  created_at    DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([action], map: "idx_audit_logs_action")
+  @@index([created_at(sort: Desc)], map: "idx_audit_logs_created_at")
+  @@index([ip_address], map: "idx_audit_logs_ip")
+  @@index([resource_type, resource_id], map: "idx_audit_logs_resource")
+  @@index([resource_id], map: "idx_audit_logs_resource_id")
+  @@index([user_id], map: "idx_audit_logs_user")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model chat_messages {
+  id           String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  room_id      String     @db.VarChar(8)
+  username     String     @db.VarChar(50)
+  message      String
+  message_type String?    @default("text") @db.VarChar(20)
+  created_at   DateTime?  @default(now()) @db.Timestamptz(6)
+  user_id      String?    @db.VarChar(255)
+  chat_rooms   chat_rooms @relation(fields: [room_id], references: [room_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([created_at], map: "idx_chat_messages_created_at")
+  @@index([room_id], map: "idx_chat_messages_room_id")
+  @@index([user_id], map: "idx_chat_messages_user_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model chat_participants {
+  id              String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  room_id         String     @db.VarChar(8)
+  username        String     @db.VarChar(50)
+  joined_at       DateTime?  @default(now()) @db.Timestamptz(6)
+  last_seen       DateTime?  @default(now()) @db.Timestamptz(6)
+  is_online       Boolean?   @default(true)
+  user_id         String?    @db.Uuid
+  cursor_position Json?
+  cursor_color    String?    @db.VarChar(7)
+  is_typing       Boolean?   @default(false)
+  chat_rooms      chat_rooms @relation(fields: [room_id], references: [room_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([room_id], map: "idx_chat_participants_room_id")
+  @@index([user_id], map: "idx_chat_participants_user_id")
+  @@index([username], map: "idx_chat_participants_username")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model chat_rooms {
+  id                           String                         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  room_id                      String                         @unique @db.VarChar(8)
+  name                         String?                        @db.VarChar(255)
+  password                     String                         @db.VarChar(255)
+  expiry_time                  String                         @default("1h") @db.VarChar(10)
+  created_at                   DateTime?                      @default(now()) @db.Timestamptz(6)
+  expires_at                   DateTime?                      @db.Timestamptz(6)
+  is_active                    Boolean?                       @default(true)
+  created_by                   String?                        @db.VarChar(255)
+  room_type                    String?                        @default("chat") @db.VarChar(20)
+  chat_messages                chat_messages[]
+  chat_participants            chat_participants[]
+  collaborative_code_documents collaborative_code_documents[]
+  user_cursors                 user_cursors[]
+
+  @@index([created_by], map: "idx_chat_rooms_created_by")
+  @@index([expires_at], map: "idx_chat_rooms_expires_at")
+  @@index([room_id], map: "idx_chat_rooms_room_id")
+  @@index([room_type], map: "idx_chat_rooms_room_type")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model collaborative_code_documents {
+  id             String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  room_id        String     @db.VarChar(8)
+  document_name  String     @default("main.js") @db.VarChar(255)
+  language       String     @default("javascript") @db.VarChar(20)
+  content        String     @default("")
+  created_at     DateTime   @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime   @default(now()) @db.Timestamptz(6)
+  created_by     String?    @db.VarChar(255)
+  last_edited_by String?    @db.VarChar(255)
+  is_active      Boolean    @default(true)
+  chat_rooms     chat_rooms @relation(fields: [room_id], references: [room_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([room_id, document_name])
+  @@index([is_active], map: "idx_code_documents_is_active")
+  @@index([language], map: "idx_code_documents_language")
+  @@index([room_id], map: "idx_code_documents_room_id")
+  @@index([updated_at], map: "idx_code_documents_updated_at")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model user_cursors {
+  id           String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  room_id      String     @db.VarChar(8)
+  user_id      String     @db.VarChar(255)
+  username     String     @db.VarChar(50)
+  cursor_data  Json
+  last_updated DateTime?  @default(now()) @db.Timestamptz(6)
+  is_active    Boolean?   @default(true)
+  chat_rooms   chat_rooms @relation(fields: [room_id], references: [room_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([room_id], map: "idx_user_cursors_room_id")
+  @@index([user_id], map: "idx_user_cursors_user_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model zip_file_metadata {
+  id                   Int                    @id @default(autoincrement())
+  original_name        String                 @db.VarChar(255)
+  size                 BigInt
+  mime_type            String                 @db.VarChar(100)
+  download_token       String                 @unique @db.VarChar(64)
+  edit_token           String                 @unique @db.VarChar(64)
+  password             String?                @db.VarChar(255)
+  expiry_date          DateTime?              @db.Timestamp(6)
+  max_downloads        Int?                   @default(10)
+  download_count       Int?                   @default(0)
+  is_active            Boolean?               @default(true)
+  uploaded_at          DateTime               @default(dbgenerated("(now() AT TIME ZONE 'Asia/Kolkata'::text)")) @db.Timestamptz(6)
+  uploaded_by          String                 @db.VarChar(45)
+  last_downloaded_at   DateTime               @default(dbgenerated("(now() AT TIME ZONE 'Asia/Kolkata'::text)")) @db.Timestamp(6)
+  appwrite_id          String                 @unique(map: "unique_appwrite_id") @db.VarChar(64)
+  encrypted_key        String                 @default("")
+  name                 String?
+  zip_subfile_metadata zip_subfile_metadata[]
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model zip_subfile_metadata {
+  id                Int               @id @default(autoincrement())
+  zip_id            Int
+  file_name         String            @db.VarChar(255)
+  file_path         String
+  size              BigInt
+  mime_type         String?           @db.VarChar(100)
+  file_token        String?           @unique @db.VarChar(64)
+  extracted         Boolean?          @default(false)
+  downloaded_at     DateTime          @default(dbgenerated("(now() AT TIME ZONE 'Asia/Kolkata'::text)")) @db.Timestamp(6)
+  zip_file_metadata zip_file_metadata @relation(fields: [zip_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
