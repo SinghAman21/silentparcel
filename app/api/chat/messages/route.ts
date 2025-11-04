@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      messages: messages.map((msg) => ({
+      messages: messages.map((msg:any) => ({
         id: msg.id,
         roomId: msg.room_id,
         username: msg.username,

@@ -53,7 +53,7 @@ export async function GET(
     console.log('chat - get documents complete');
     return NextResponse.json({
       success: true,
-      documents: documents?.map((doc) => ({
+      documents: documents?.map((doc:any) => ({
         id: doc.id,
         roomId: doc.room_id,
         documentName: doc.document_name,

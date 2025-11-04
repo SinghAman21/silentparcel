@@ -90,7 +90,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      participants: participants.map((participant) => ({
+      participants: participants.map((participant:any) => ({
         id: participant.id,
         roomId: participant.room_id,
         username: participant.username,
