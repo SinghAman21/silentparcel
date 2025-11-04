@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "rm -rf .next && rm -f tsconfig.tsbuildinfo && next build",
+    "build": "rm -rf .next && rm -f tsconfig.tsbuildinfo && next build && npx prisma generate",
     "start": "next start",
     "lint": "next lint",
     "clean": "rm -rf .next && rm -f tsconfig.tsbuildinfo && rm -rf node_modules/.cache",
