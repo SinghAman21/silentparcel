@@ -310,7 +310,7 @@ export async function GET(
 
     // Return file
     console.log('Returning file as download');
-    const response = new NextResponse(fileBuffer);
+    const response = new NextResponse(new Uint8Array(fileBuffer));
     response.headers.set("Content-type", "application/zip");
     response.headers.set("Content-Disposition", `attachment; filename="${fileRecord.original_name}"`);
     return response;
@@ -490,7 +490,7 @@ export async function POST(
 
     // Return new ZIP
     console.log('Returning new ZIP as download');
-    const response = new NextResponse(newZipBuffer);  // flag:   const response = new NextResponse(new Uint8Array(newZipBuffer));
+    const response = new NextResponse(new Uint8Array(newZipBuffer));  // flag:   const response = new NextResponse(new Uint8Array(newZipBuffer));
     response.headers.set("Content-Type", "application/zip");
     response.headers.set(
       "Content-Disposition",

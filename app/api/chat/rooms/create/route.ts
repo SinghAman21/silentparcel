@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { roomCreationRateLimiter } from '@/lib/middleware/rateLimiter';
 import { generateId, generateRoomPassword, getClientIP } from '@/lib/security';
-import { supabaseAdmin } from '@/lib/supabase';
+import { prisma } from '@/lib/prisma';
 
 export async function POST(request: NextRequest) {
   try {
@@ -37,29 +37,24 @@ export async function POST(request: NextRequest) {
     const creatorId = generateId();
     // FIXED: Don't create phantom users - room creation shouldn't auto-add participants
 
-    // Create room in Supabase - REMOVED problematic fields
-    const { data: room, error: roomError } = await supabaseAdmin
-      .from('chat_rooms')
-      .insert({
-        room_id: roomId,
-        name: roomName || getDefaultRoomName(roomType),
-        password: roomPassword,
-        expiry_time: expiryTime || '1h',
-        created_by: creatorId,
-        is_active: true,
-        room_type: roomType
-        // Removed: default_language, collaborative_mode
-      })
-      .select()
-      .single();
-
-    if (roomError) {
-      console.error('Error creating room:', roomError);
+    // Create room using Prisma transaction
+    let room: any;
+    try {
+      room = await prisma.chat_rooms.create({
+        data: {
+          room_id: roomId,
+          name: roomName || getDefaultRoomName(roomType),
+          password: roomPassword,
+          expiry_time: expiryTime || '1h',
+          created_by: creatorId,
+          is_active: true,
+          room_type: roomType
+        }
+      });
+    } catch (err) {
+      console.error('Error creating room:', err);
       console.log('chat - create room failed (database error)');
-      return NextResponse.json(
-        { error: 'Failed to create room. Please try again.' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Failed to create room. Please try again.' }, { status: 500 });
     }
 
     // FIXED: Don't automatically create participants during room creation
@@ -68,25 +63,24 @@ export async function POST(request: NextRequest) {
     // Create initial code document for code rooms (with default language)
     if (roomType !== 'chat') {
       const defaultLanguage = 'javascript'; // Default language for all code rooms
-      const { error: documentError } = await supabaseAdmin
-        .from('collaborative_code_documents')
-        .insert({
-          room_id: roomId,
-          document_name: `main.${getFileExtension(defaultLanguage)}`,
-          language: defaultLanguage,
-          content: getDefaultContent(defaultLanguage),
-          created_by: creatorId
+      try {
+        await prisma.collaborative_code_documents.create({
+          data: {
+            room_id: roomId,
+            document_name: `main.${getFileExtension(defaultLanguage)}`,
+            language: defaultLanguage,
+            content: getDefaultContent(defaultLanguage),
+            created_by: creatorId
+          }
         });
-
-      if (documentError) {
-        console.error('Error creating code document:', documentError);
-        // Don't fail the request, just log the error
+      } catch (err) {
+        console.error('Error creating code document:', err);
       }
     }
 
     // Log audit event (optional - don't fail if this fails)
     try {
-      await supabaseAdmin.from('audit_logs').insert({
+      await prisma.audit_logs.create({ data: {
         action: 'room_create',
         resource_type: 'chat_room',
         resource_id: roomId,
@@ -97,10 +91,9 @@ export async function POST(request: NextRequest) {
           expiryTime: expiryTime || '1h',
           roomType
         }
-      });
+      }});
     } catch (auditError) {
       console.error('Error logging audit event:', auditError);
-      // Don't fail the request if audit logging fails
     }
 
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || request.nextUrl.origin;
@@ -115,7 +108,7 @@ export async function POST(request: NextRequest) {
         password: roomPassword,
         url: roomUrl,
         expiryTime: expiryTime || '1h',
-        expiresAt: room.expires_at,
+  expiresAt: room.expires_at,
         roomType
         // Removed: defaultLanguage, collaborativeMode
       },
