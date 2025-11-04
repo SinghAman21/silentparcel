@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { prisma } from '@/lib/prisma';
 import * as crypto from 'crypto';
 
 export async function GET(
@@ -17,38 +17,25 @@ export async function GET(
     }
 
     // Get specific document
-    const { data: document, error } = await supabaseAdmin
-      .from('collaborative_code_documents')
-      .select('*')
-      .eq('id', documentId)
-      .eq('room_id', roomId)
-      .eq('is_active', true)
-      .single();
-
-    if (error || !document) {
+    const document = await prisma.collaborative_code_documents.findFirst({ where: { id: documentId, room_id: roomId, is_active: true } });
+    if (!document) {
       console.log('chat - get document failed (document not found)');
-      return NextResponse.json(
-        { error: 'Document not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Document not found' }, { status: 404 });
     }
 
     console.log('chat - get document complete');
-    return NextResponse.json({
-      success: true,
-      document: {
-        id: document.id,
-        roomId: document.room_id,
-        documentName: document.document_name,
-        language: document.language,
-        content: document.content,
-        createdAt: document.created_at,
-        updatedAt: document.updated_at,
-        createdBy: document.created_by,
-        lastEditedBy: document.last_edited_by,
-        isActive: document.is_active
-      }
-    });
+    return NextResponse.json({ success: true, document: {
+      id: document.id,
+      roomId: document.room_id,
+      documentName: document.document_name,
+      language: document.language,
+      content: document.content,
+      createdAt: document.created_at ? new Date(document.created_at).toISOString() : null,
+      updatedAt: document.updated_at ? new Date(document.updated_at).toISOString() : null,
+      createdBy: document.created_by,
+      lastEditedBy: document.last_edited_by,
+      isActive: document.is_active
+    }});
 
   } catch (error) {
     console.error('Error getting document:', error);
@@ -94,40 +81,33 @@ export async function PUT(
       );
     }
 
-    const { data: document, error } = await supabaseAdmin
-      .from('collaborative_code_documents')
-      .update(updateData)
-      .eq('id', documentId)
-      .eq('room_id', roomId)
-      .eq('is_active', true)
-      .select()
-      .single();
-
-    if (error || !document) {
-      console.error('Error updating document:', error);
-      console.log('chat - update document failed (database error)');
-      return NextResponse.json(
-        { error: 'Failed to update document' },
-        { status: 500 }
-      );
+    // Ensure document exists and belongs to room
+    const existing = await prisma.collaborative_code_documents.findFirst({ where: { id: documentId, room_id: roomId, is_active: true } });
+    if (!existing) {
+      console.error('Document not found for update');
+      return NextResponse.json({ error: 'Document not found' }, { status: 404 });
     }
 
-    console.log('chat - update document complete');
-    return NextResponse.json({
-      success: true,
-      document: {
-        id: document.id,
-        roomId: document.room_id,
-        documentName: document.document_name,
-        language: document.language,
-        content: document.content,
-        createdAt: document.created_at,
-        updatedAt: document.updated_at,
-        createdBy: document.created_by,
-        lastEditedBy: document.last_edited_by,
-        isActive: document.is_active
-      }
-    });
+    try {
+      const updated = await prisma.collaborative_code_documents.update({ where: { id: existing.id }, data: updateData });
+      console.log('chat - update document complete');
+      return NextResponse.json({ success: true, document: {
+        id: updated.id,
+        roomId: updated.room_id,
+        documentName: updated.document_name,
+        language: updated.language,
+        content: updated.content,
+        createdAt: updated.created_at ? new Date(updated.created_at).toISOString() : null,
+        updatedAt: updated.updated_at ? new Date(updated.updated_at).toISOString() : null,
+        createdBy: updated.created_by,
+        lastEditedBy: updated.last_edited_by,
+        isActive: updated.is_active
+      }});
+    } catch (err) {
+      console.error('Error updating document:', err);
+      console.log('chat - update document failed (database error)');
+      return NextResponse.json({ error: 'Failed to update document' }, { status: 500 });
+    }
 
   } catch (error) {
     console.error('Error updating document:', error);
@@ -154,26 +134,15 @@ export async function DELETE(
     }
 
     // Soft delete document
-    const { error } = await supabaseAdmin
-      .from('collaborative_code_documents')
-      .update({ is_active: false })
-      .eq('id', documentId)
-      .eq('room_id', roomId);
-
-    if (error) {
-      console.error('Error deleting document:', error);
+    try {
+      await prisma.collaborative_code_documents.updateMany({ where: { id: documentId, room_id: roomId }, data: { is_active: false } });
+      console.log('chat - delete document complete');
+      return NextResponse.json({ success: true, message: 'Document deleted successfully' });
+    } catch (err) {
+      console.error('Error deleting document:', err);
       console.log('chat - delete document failed (database error)');
-      return NextResponse.json(
-        { error: 'Failed to delete document' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Failed to delete document' }, { status: 500 });
     }
-
-    console.log('chat - delete document complete');
-    return NextResponse.json({
-      success: true,
-      message: 'Document deleted successfully'
-    });
 
   } catch (error) {
     console.error('Error deleting document:', error);

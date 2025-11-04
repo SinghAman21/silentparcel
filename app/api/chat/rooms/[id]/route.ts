@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { prisma } from '@/lib/prisma';
 
 export async function GET(
   request: NextRequest,
@@ -16,62 +16,41 @@ export async function GET(
     }
 
     // Get room information
-    const { data: room, error: roomError } = await supabaseAdmin
-      .from('chat_rooms')
-      .select('*')
-      .eq('room_id', roomId)
-      .eq('is_active', true)
-      .single();
-
-    if (roomError || !room) {
+    const room = await prisma.chat_rooms.findFirst({ where: { room_id: roomId, is_active: true } });
+    if (!room) {
       console.log('chat - get room info failed (room not found)');
-      return NextResponse.json(
-        { error: 'Room not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Room not found' }, { status: 404 });
     }
 
     // Check if room has expired
-    if (new Date(room.expires_at) < new Date()) {
+    if (room.expires_at && new Date(room.expires_at) < new Date()) {
       console.log('chat - get room info failed (room expired)');
-      return NextResponse.json(
-        { error: 'Room has expired' },
-        { status: 410 }
-      );
+      return NextResponse.json({ error: 'Room has expired' }, { status: 410 });
     }
 
     // Get participants count
-    const { count: participantCount, error: countError } = await supabaseAdmin
-      .from('chat_participants')
-      .select('*', { count: 'exact', head: true })
-      .eq('room_id', roomId)
-      .eq('is_online', true);
-
-    if (countError) {
-      console.error('Error getting participant count:', countError);
+    let participantCount = 0;
+    try {
+      participantCount = await prisma.chat_participants.count({ where: { room_id: roomId, is_online: true } });
+    } catch (err) {
+      console.error('Error getting participant count:', err);
     }
 
     // Get recent messages count
-    const { count: messageCount, error: messageCountError } = await supabaseAdmin
-      .from('chat_messages')
-      .select('*', { count: 'exact', head: true })
-      .eq('room_id', roomId);
-
-    if (messageCountError) {
-      console.error('Error getting message count:', messageCountError);
+    let messageCount = 0;
+    try {
+      messageCount = await prisma.chat_messages.count({ where: { room_id: roomId } });
+    } catch (err) {
+      console.error('Error getting message count:', err);
     }
 
     // Get code documents count for collaborative rooms
     let codeDocumentCount = 0;
     if (room.room_type !== 'chat') {
-      const { count: docCount, error: docCountError } = await supabaseAdmin
-        .from('collaborative_code_documents')
-        .select('*', { count: 'exact', head: true })
-        .eq('room_id', roomId)
-        .eq('is_active', true);
-
-      if (!docCountError) {
-        codeDocumentCount = docCount || 0;
+      try {
+        codeDocumentCount = await prisma.collaborative_code_documents.count({ where: { room_id: roomId, is_active: true } });
+      } catch (err) {
+        console.error('Error getting code document count:', err);
       }
     }
 

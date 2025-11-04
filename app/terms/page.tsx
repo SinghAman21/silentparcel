@@ -236,7 +236,7 @@ export default function TermsPage() {
 								<div>
 									<h4 className="font-semibold mb-2">File Limits</h4>
 									<ul className="space-y-1 text-sm text-muted-foreground">
-										<li>• Maximum file size: 50MB per file</li>
+										<li>• Maximum archive size in one go: 50MB total</li>
 										<li>• Supported file types: All file types</li>
 										<li>• Maximum downloads: Configurable (default: 10)</li>
 									</ul>

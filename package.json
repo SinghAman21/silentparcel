@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "rm -rf .next && rm -f tsconfig.tsbuildinfo && next build",
+    "build": "rm -rf .next && rm -f tsconfig.tsbuildinfo && npx prisma generate && next build ",
     "start": "next start",
     "lint": "next lint",
     "clean": "rm -rf .next && rm -f tsconfig.tsbuildinfo && rm -rf node_modules/.cache",
@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
+    "@prisma/client": "^6.18.0",
     "@radix-ui/react-accordion": "^1.2.11",
     "@radix-ui/react-alert-dialog": "^1.1.14",
     "@radix-ui/react-avatar": "^1.1.10",
@@ -73,7 +74,8 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/react": "18.2.25",
     "eslint": "8.57.0",
-    "eslint-config-next": "15.4.4"
+    "eslint-config-next": "15.4.4",
+    "prisma": "^6.18.0"
   },
   "optionalDependencies": {
     "bufferutil": "^4.0.9",

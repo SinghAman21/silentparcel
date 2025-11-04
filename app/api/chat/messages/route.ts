@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { prisma } from '@/lib/prisma';
 import * as crypto from 'crypto';
 
 export async function POST(request: NextRequest) {
@@ -25,48 +25,29 @@ export async function POST(request: NextRequest) {
     const messageUserId = userId || crypto.randomUUID();
 
     // Verify room exists and is active
-    const { data: room, error: roomError } = await supabaseAdmin
-      .from('chat_rooms')
-      .select('*')
-      .eq('room_id', roomId)
-      .eq('is_active', true)
-      .single();
+    const room = await prisma.chat_rooms.findFirst({
+      where: { room_id: roomId, is_active: true }
+    });
 
-    if (roomError || !room) {
-      return NextResponse.json(
-        { error: 'Room not found or inactive' },
-        { status: 404 }
-      );
+    if (!room) {
+      return NextResponse.json({ error: 'Room not found or inactive' }, { status: 404 });
     }
 
     // Check if room has expired
-    if (new Date(room.expires_at) < new Date()) {
-      return NextResponse.json(
-        { error: 'Room has expired' },
-        { status: 410 }
-      );
+    if (room.expires_at && new Date(room.expires_at) < new Date()) {
+      return NextResponse.json({ error: 'Room has expired' }, { status: 410 });
     }
 
     // Insert message
-    const { data: newMessage, error: messageError } = await supabaseAdmin
-      .from('chat_messages')
-      .insert({
+    const newMessage = await prisma.chat_messages.create({
+      data: {
         room_id: roomId,
-        username: username,
-        message: message,
+        username,
+        message,
         message_type: messageType,
         user_id: messageUserId
-      })
-      .select()
-      .single();
-
-    if (messageError) {
-      console.error('Error inserting message:', messageError);
-      return NextResponse.json(
-        { error: 'Failed to send message' },
-        { status: 500 }
-      );
-    }
+      }
+    });
 
     return NextResponse.json({
       success: true,
@@ -104,20 +85,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Get messages for the room
-    const { data: messages, error } = await supabaseAdmin
-      .from('chat_messages')
-      .select('*')
-      .eq('room_id', roomId)
-      .order('created_at', { ascending: true })
-      .limit(limit);
-
-    if (error) {
-      console.error('Error fetching messages:', error);
-      return NextResponse.json(
-        { error: 'Failed to fetch messages' },
-        { status: 500 }
-      );
-    }
+    const messages = await prisma.chat_messages.findMany({
+      where: { room_id: roomId },
+      orderBy: { created_at: 'asc' },
+      take: limit
+    });
 
     return NextResponse.json({
       success: true,

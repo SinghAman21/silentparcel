@@ -137,7 +137,7 @@ export function FileDropzone({ onFileSelect }: FileDropzoneProps) {
           : 'Drag & drop files or folders'}
         </h3>
         <p className="text-sm text-muted-foreground mb-0.5">
-        or select below (max 50MB per file)
+        or select below (max 50MB )
         </p>
       </div>
 

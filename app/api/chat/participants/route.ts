@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { prisma } from '@/lib/prisma';
 import * as crypto from 'crypto';
 
 export async function POST(request: NextRequest) {
@@ -17,36 +17,16 @@ export async function POST(request: NextRequest) {
     const participantUserId = userId || crypto.randomUUID();
 
     // Verify room exists and is active
-    const { data: room, error: roomError } = await supabaseAdmin
-      .from('chat_rooms')
-      .select('*')
-      .eq('room_id', roomId)
-      .eq('is_active', true)
-      .single();
-
-    if (roomError || !room) {
-      return NextResponse.json(
-        { error: 'Room not found or inactive' },
-        { status: 404 }
-      );
-    }
+    const room = await prisma.chat_rooms.findFirst({ where: { room_id: roomId, is_active: true } });
+    if (!room) return NextResponse.json({ error: 'Room not found or inactive' }, { status: 404 });
 
     // Check if room has expired
-    if (new Date(room.expires_at) < new Date()) {
-      return NextResponse.json(
-        { error: 'Room has expired' },
-        { status: 410 }
-      );
+    if (room.expires_at && new Date(room.expires_at) < new Date()) {
+      return NextResponse.json({ error: 'Room has expired' }, { status: 410 });
     }
 
     // Check if participant already exists
-    const { data: existingParticipant } = await supabaseAdmin
-      .from('chat_participants')
-      .select('*')
-      .eq('room_id', roomId)
-      .eq('username', username)
-      .single();
-
+    const existingParticipant = await prisma.chat_participants.findFirst({ where: { room_id: roomId, username } });
     if (existingParticipant) {
       // Return error for duplicate username to trigger frontend handling
       return NextResponse.json(
@@ -63,23 +43,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Insert new participant
-    const { data: newParticipant, error: insertError } = await supabaseAdmin
-      .from('chat_participants')
-      .insert({
+    const newParticipant = await prisma.chat_participants.create({
+      data: {
         room_id: roomId,
-        username: username,
+        username,
         user_id: participantUserId
-      })
-      .select()
-      .single();
-
-    if (insertError) {
-      console.error('Error inserting participant:', insertError);
-      return NextResponse.json(
-        { error: 'Failed to join room' },
-        { status: 500 }
-      );
-    }
+      }
+    });
 
     return NextResponse.json({
       success: true,
@@ -116,19 +86,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get participants for the room
-    const { data: participants, error } = await supabaseAdmin
-      .from('chat_participants')
-      .select('*')
-      .eq('room_id', roomId)
-      .order('joined_at', { ascending: true });
-
-    if (error) {
-      console.error('Error fetching participants:', error);
-      return NextResponse.json(
-        { error: 'Failed to fetch participants' },
-        { status: 500 }
-      );
-    }
+    const participants = await prisma.chat_participants.findMany({ where: { room_id: roomId }, orderBy: { joined_at: 'asc' } });
 
     return NextResponse.json({
       success: true,
@@ -163,25 +121,17 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    // Update participant status
-    const { data: updatedParticipant, error } = await supabaseAdmin
-      .from('chat_participants')
-      .update({
-        last_seen: new Date().toISOString(),
-        is_online: isOnline !== undefined ? isOnline : false
-      })
-      .eq('room_id', roomId)
-      .eq('username', username)
-      .select()
-      .single();
+    // Update participant status: find then update
+    const existing = await prisma.chat_participants.findFirst({ where: { room_id: roomId, username } });
+    if (!existing) return NextResponse.json({ error: 'Participant not found' }, { status: 404 });
 
-    if (error) {
-      console.error('Error updating participant status:', error);
-      return NextResponse.json(
-        { error: 'Failed to update participant status' },
-        { status: 500 }
-      );
-    }
+    const updatedParticipant = await prisma.chat_participants.update({
+      where: { id: existing.id },
+      data: {
+        last_seen: new Date(),
+        is_online: isOnline !== undefined ? isOnline : false
+      }
+    });
 
     return NextResponse.json({
       success: true,
@@ -217,33 +167,12 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Verify room exists and is active
-    const { data: room, error: roomError } = await supabaseAdmin
-      .from('chat_rooms')
-      .select('*')
-      .eq('room_id', roomId)
-      .eq('is_active', true)
-      .single();
-
-    if (roomError || !room) {
-      return NextResponse.json(
-        { error: 'Room not found or inactive' },
-        { status: 404 }
-      );
-    }
+    const room = await prisma.chat_rooms.findFirst({ where: { room_id: roomId, is_active: true } });
+    if (!room) return NextResponse.json({ error: 'Room not found or inactive' }, { status: 404 });
 
     // Verify admin is the first participant (has admin privileges)
-    const { data: participants, error: participantsError } = await supabaseAdmin
-      .from('chat_participants')
-      .select('*')
-      .eq('room_id', roomId)
-      .order('joined_at', { ascending: true });
-
-    if (participantsError || !participants || participants.length === 0) {
-      return NextResponse.json(
-        { error: 'No participants found' },
-        { status: 404 }
-      );
-    }
+    const participants = await prisma.chat_participants.findMany({ where: { room_id: roomId }, orderBy: { joined_at: 'asc' } });
+    if (!participants || participants.length === 0) return NextResponse.json({ error: 'No participants found' }, { status: 404 });
 
     // Check if the admin is actually the first user (room admin)
     const firstParticipant = participants[0];
@@ -272,39 +201,28 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Remove the participant from the room
-    const { error: deleteError } = await supabaseAdmin
-      .from('chat_participants')
-      .delete()
-      .eq('id', targetParticipant.id);
-
-    if (deleteError) {
-      console.error('Error removing participant:', deleteError);
-      return NextResponse.json(
-        { error: 'Failed to remove participant' },
-        { status: 500 }
-      );
+    try {
+      await prisma.chat_participants.delete({ where: { id: targetParticipant.id } });
+    } catch (err) {
+      console.error('Error removing participant:', err);
+      return NextResponse.json({ error: 'Failed to remove participant' }, { status: 500 });
     }
 
     // Send a system message about the kick
-    const { error: messageError } = await supabaseAdmin
-      .from('chat_messages')
-      .insert({
+    try {
+      await prisma.chat_messages.create({ data: {
         room_id: roomId,
         username: 'System',
         user_id: 'system',
         message: `${targetUsername} has been removed from the room by ${adminUsername}`,
         message_type: 'system'
-      });
-
-    if (messageError) {
-      console.error('Error sending system message:', messageError);
+      }});
+    } catch (err) {
+      console.error('Error sending system message:', err);
       // Don't fail the request if system message fails
     }
 
-    return NextResponse.json({
-      success: true,
-      message: `${targetUsername} has been removed from the room`
-    });
+    return NextResponse.json({ success: true, message: `${targetUsername} has been removed from the room` });
 
   } catch (error) {
     console.error('Error in participant removal:', error);
