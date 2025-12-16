@@ -30,7 +30,12 @@ export async function GET(
     console.log('Fetching subfile metadata from zip_subfile_metadata');
     let subfiles = [];
     try {
-      subfiles = await prisma.zip_subfile_metadata.findMany({ where: { zip_id: fileRecord.id }, select: { file_name: true, file_path: true, size: true, mime_type: true, file_token: true, extracted: true, downloaded_at: true } });
+      const rawSubfiles = await prisma.zip_subfile_metadata.findMany({ where: { zip_id: fileRecord.id }, select: { file_name: true, file_path: true, size: true, mime_type: true, file_token: true, extracted: true, downloaded_at: true } });
+      // Convert BigInt values to strings for JSON serialization
+      subfiles = rawSubfiles.map(file => ({
+        ...file,
+        size: typeof file.size === 'bigint' ? file.size.toString() : file.size,
+      }));
     } catch (err:any) {
       console.log('Failed to fetch file tree', err);
       return NextResponse.json({ error: 'Failed to fetch file tree', details: err?.message }, { status: 500 });
@@ -45,8 +50,8 @@ export async function GET(
       type: fileRecord.mime_type,
       uploadDate: fileRecord.uploaded_at ? new Date(fileRecord.uploaded_at).toISOString() : null,
       lastDownloadedAt: fileRecord.last_downloaded_at ? new Date(fileRecord.last_downloaded_at).toISOString() : null,
-      downloadCount: fileRecord.download_count,
-      maxDownloads: fileRecord.max_downloads,
+      downloadCount: typeof fileRecord.download_count === 'bigint' ? (fileRecord.download_count as bigint).toString() : (fileRecord.download_count as number),
+      maxDownloads: typeof fileRecord.max_downloads === 'bigint' ? (fileRecord.max_downloads as bigint).toString() : (fileRecord.max_downloads as number),
       expiryDate: fileRecord.expiry_date ? new Date(fileRecord.expiry_date).toISOString() : null,
       isPasswordProtected: !!fileRecord.password,
       virusScanStatus: null,

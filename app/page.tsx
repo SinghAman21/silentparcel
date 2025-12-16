@@ -25,6 +25,7 @@ import Image from "next/image";
 import dynamic from 'next/dynamic';
 import { HydrationSafe } from "@/components/hydration-safe";
 import { PeerlistBadge, ProductHunt } from '@/components/Launch';
+import GitHubStars from "@/components/githubstars";
 
 
 
@@ -334,6 +335,12 @@ export default function Home() {
 						>
 							Security
 						</Link>
+						<a
+							className="hover:text-foreground transition-colors"
+						>
+							<GitHubStars repo="SinghAman21/silentparcel" stargazersCount={13} />
+
+						</a>
 						<ThemeToggle />
 					</div>
 					{/* Mobile nav toggle */}
@@ -434,7 +441,7 @@ export default function Home() {
 									className=" bg-muted hover:bg-muted/80 text-foreground rounded-lg font-medium border border-border transition-all duration-200 hover:scale-[1.02]"
 								>
 									<MessageSquare className="mr-2 h-4 w-4 " />
-									Create room 
+									Create room
 								</Button>
 							</Link>
 							{/* <Link href="/rooms/create">
@@ -448,16 +455,16 @@ export default function Home() {
 							</Link> */}
 						</div>
 
-                        {/* Stable server placeholder; dynamic badge mounts on client */}
-                        <HydrationSafe
-                            fallback={<div className="flex justify-center mb-10" id="peerlistBtn" aria-hidden />}
-                            suppressHydrationWarning
-                        >
+						{/* Stable server placeholder; dynamic badge mounts on client */}
+						<HydrationSafe
+							fallback={<div className="flex justify-center mb-10" id="peerlistBtn" aria-hidden />}
+							suppressHydrationWarning
+						>
 							<div className="flex justify-center mb-10 gap-2" id="peerlistBtn" aria-hidden>
-                            <PeerlistBadge />
-							<ProductHunt />
+								{/* <PeerlistBadge /> */}
+								{/* <ProductHunt /> */}
 							</div>
-                        </HydrationSafe>
+						</HydrationSafe>
 
 						<div className="fade-in grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-8 max-w-xs sm:max-w-lg mx-auto">
 							<div className="text-center">
