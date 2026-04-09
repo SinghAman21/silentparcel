@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@custom-variant dark (&: is(.dark *));
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
 	--font-sans: var(--font-inter), "InterVar", sans-serif;

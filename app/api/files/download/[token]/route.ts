@@ -430,17 +430,55 @@ export async function POST(
         }, { status: 404 });
       }
 
+      // If a single file is selected, return the raw file instead of a ZIP.
+      if (selectedEntries.length === 1 && !selectedEntries[0].isDirectory) {
+        const entry = selectedEntries[0];
+        const entryData = entry.getData();
+        if (!entryData || entryData.length === 0) {
+          throw new Error("Selected file is empty or unreadable");
+        }
+
+        const { data: subfileRecord, error: subfileError } = await supabaseAdmin
+          .from("zip_subfile_metadata")
+          .select("mime_type, file_name")
+          .eq("zip_id", fileRecord.id)
+          .eq("file_path", entry.entryName)
+          .single();
+
+        if (subfileError) {
+          console.warn("Failed to fetch subfile metadata for mime type:", subfileError);
+        }
+
+        const mimeType = subfileRecord?.mime_type || "application/octet-stream";
+        const downloadName = subfileRecord?.file_name || entry.name || "download";
+
+        // Update download count and handle cleanup
+        await updateDownloadCountAndCleanup(fileRecord, request);
+
+        // Create audit log
+        await createAuditLog("file_download_partial", fileRecord, request, { selected: selectedPaths });
+
+        console.log("Returning single file as download:", downloadName, mimeType);
+        const singleResponse = new NextResponse(new Uint8Array(entryData));
+        singleResponse.headers.set("Content-Type", mimeType);
+        singleResponse.headers.set(
+          "Content-Disposition",
+          `attachment; filename="${downloadName}"`
+        );
+        return singleResponse;
+      }
+
       // Create a new ZIP with only selected entries
       const newZip = new AdmZip();
       let processedEntries = 0;
-      
+
       for (const entry of selectedEntries) {
         try {
           if (!entry || !entry.entryName) {
             console.warn('Skipping invalid entry');
             continue;
           }
-          
+
           if (entry.isDirectory) {
             newZip.addFile(entry.entryName, Buffer.alloc(0));
           } else {
@@ -458,21 +496,17 @@ export async function POST(
           // Continue with other entries instead of failing completely
         }
       }
-      
+
       if (processedEntries === 0) {
         throw new Error("No valid entries could be processed");
       }
 
       newZipBuffer = newZip.toBuffer();
-      
+
       // Generate filename safely
-      if (selectedEntries.length === 1 && !selectedEntries[0].isDirectory) {
-        newZipName = selectedEntries[0].name || "extracted_file";
-      } else {
-        const originalName = fileRecord.original_name || "archive";
-        newZipName = `${originalName.replace(/\.zip$/i, "")}_partial.zip`;
-      }
-      
+      const originalName = fileRecord.original_name || "archive";
+      newZipName = `${originalName.replace(/\.zip$/i, "")}_partial.zip`;
+
       console.log('Created new ZIP with selected files, size:', newZipBuffer.length, 'filename:', newZipName);
     } catch (err) {
       console.error("ZIP extraction error", err);

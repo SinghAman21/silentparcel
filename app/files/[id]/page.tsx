@@ -445,14 +445,9 @@ export default function FileDownloadPage() {
 				return;
 			}
 			
-			// Check if response is actually a blob
-			const contentType = res.headers.get("Content-Type");
-			if (!contentType || !contentType.includes("application/zip")) {
-				console.error('Unexpected content type:', contentType);
-				setError("Download failed: Invalid response format");
-				setDownloading(false);
-				return;
-			}
+			// Accept both ZIP (multiple selection) and single-file responses
+			const contentType = res.headers.get("Content-Type") || "";
+			const isZipResponse = contentType.includes("application/zip");
 			
 			let blob;
 			try {
@@ -472,7 +467,7 @@ export default function FileDownloadPage() {
 			a.href = url;
 			
 			// Get filename from Content-Disposition header or use fallback
-			let filename = "partial_download.zip";
+			let filename = isZipResponse ? "partial_download.zip" : "download";
 			const contentDisposition = res.headers.get("Content-Disposition");
 			if (contentDisposition) {
 				const filenameMatch = contentDisposition.match(/filename="([^"]+)"/);
@@ -481,10 +476,13 @@ export default function FileDownloadPage() {
 				}
 			}
 			
-			// Fallback to using fileInfo if header parsing fails
-			if (filename === "partial_download.zip" && fileInfo?.original_name) {
+			// Fallback to using fileInfo or selected path if header parsing fails
+			if (isZipResponse && filename === "partial_download.zip" && fileInfo?.original_name) {
 				const originalName = fileInfo.original_name || "archive";
 				filename = `${originalName.replace(/\.zip$/i, "")}_partial.zip`;
+			} else if (!isZipResponse && filename === "download" && selectedPaths.length === 1) {
+				const lastSegment = selectedPaths[0].split("/").filter(Boolean).pop();
+				if (lastSegment) filename = lastSegment;
 			}
 			
 			a.download = filename;

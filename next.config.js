@@ -39,6 +39,9 @@ const nextConfig = {
 		responseLimit: false, // Disable response size limit
 	},
 
+	// Explicit Turbopack configuration (required when a webpack config exists)
+	turbopack: {},
+
 	webpack: (config, { isServer }) => {
 		config.ignoreWarnings = [
 			(warning) =>
