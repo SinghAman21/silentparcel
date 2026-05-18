@@ -169,6 +169,11 @@ export default function RootLayout({
 
 					gtag('config', 'G-PMRFNG45RF');`}
 				</Script> */}
+				<script 
+				data-site-hex="r2hlwtgfle5f" 
+				src="https://pulsev0.vercel.app/free.js"
+				async
+				/>
 			</head>
 			<body className={`${Inter.variable} ${JetbrainsMono.variable}`}>
 				{/* Temporarily disabled UTM tracking to debug 500 error */}
@@ -181,11 +186,11 @@ export default function RootLayout({
 				>
 					{children}
 				</ThemeProvider>
-				<script 
+				{/* <script 
 				data-site-hex="r2hlwtgfle5f" 
 				src="https://pulsev0.vercel.app/free.js"
 				async
-				/>
+				/> */}
 			</body>
 		</html>
 	);
