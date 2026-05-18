@@ -181,6 +181,11 @@ export default function RootLayout({
 				>
 					{children}
 				</ThemeProvider>
+				<script 
+				data-site-hex="r2hlwtgfle5f" 
+				src="https://pulsev0.vercel.app/free.js"
+				async
+				/>
 			</body>
 		</html>
 	);
