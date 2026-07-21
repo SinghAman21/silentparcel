@@ -316,12 +316,17 @@ export default function FileDownloadPage() {
 	useEffect(() => {
 		const fetchMeta = async () => {
 			setError("");
-			const res = await fetch(`/api/files/metadata/${fileId}`);
-			if (res.ok) {
-				const data = await res.json();
-				setFileInfo(data);
-				setFileExists(true);
-			} else {
+			try {
+				const res = await fetch(`/api/files/metadata/${fileId}`);
+				if (res.ok) {
+					const data = await res.json();
+					setFileInfo(data);
+					setFileExists(true);
+				} else {
+					setFileExists(false);
+				}
+			} catch {
+				// Network failure — without this the page shows the skeleton forever
 				setFileExists(false);
 			}
 		};
