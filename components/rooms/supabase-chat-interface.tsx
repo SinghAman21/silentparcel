@@ -139,6 +139,9 @@ interface SupabaseChatInterfaceProps {
 export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave, roomName }: SupabaseChatInterfaceProps) {
   const [message, setMessage] = useState('');
   const [username, setUsername] = useState('');
+  // Dialog draft — committed to `username` only on submit, otherwise the
+  // join effect fires on the first keystroke and registers a partial name
+  const [usernameInput, setUsernameInput] = useState('');
   const [showUsernameDialog, setShowUsernameDialog] = useState(true);
   const [timeLeft, setTimeLeft] = useState(3600); // Will be updated with actual room expiry
   const [roomExpiresAt, setRoomExpiresAt] = useState<string | null>(null);
@@ -170,9 +173,13 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave,
 
   // Decrypt messages when they arrive or room password changes
   useEffect(() => {
+    // Guard against an older (slow) decryption run resolving after a newer
+    // one and clobbering it with a map missing the latest messages
+    let cancelled = false;
+
     const decryptAllMessages = async () => {
       if (!roomPassword) return;
-      
+
       const newDecryptedMap = new Map<string, string>();
       
       for (const msg of messages) {
@@ -200,10 +207,16 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave,
         }
       }
       
-      setDecryptedMessages(newDecryptedMap);
+      if (!cancelled) {
+        setDecryptedMessages(newDecryptedMap);
+      }
     };
 
     decryptAllMessages();
+
+    return () => {
+      cancelled = true;
+    };
   }, [messages, roomPassword]);
 
   // FIXED: Comprehensive session and admin role persistence
@@ -452,14 +465,15 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave,
   // FIXED: Timer countdown with actual room expiry time
   useEffect(() => {
     if (!roomExpiresAt) return;
-    
+
+    let redirectTimer: ReturnType<typeof setTimeout> | null = null;
     const timer = setInterval(() => {
       const expiryTime = new Date(roomExpiresAt).getTime();
       const now = Date.now();
       const secondsLeft = Math.max(0, Math.floor((expiryTime - now) / 1000));
-      
+
       setTimeLeft(secondsLeft);
-      
+
       // If time is up, show expiry message and redirect
       if (secondsLeft === 0) {
         toast({
@@ -467,17 +481,21 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave,
           description: "This room has expired and will be cleaned up.",
           variant: "destructive"
         });
-        
+
         // Redirect after a short delay
-        setTimeout(() => {
+        redirectTimer = setTimeout(() => {
           onLeave();
         }, 3000);
-        
+
         clearInterval(timer);
       }
     }, 1000);
-    
-    return () => clearInterval(timer);
+
+    return () => {
+      clearInterval(timer);
+      // Don't navigate the user after they've already left/unmounted
+      if (redirectTimer) clearTimeout(redirectTimer);
+    };
   }, [roomExpiresAt, toast, onLeave]);
 
   // Auto scroll to bottom
@@ -528,22 +546,10 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave,
 
   const handleUsernameSubmit = (newUsername: string) => {
     if (newUsername.trim()) {
-      const trimmedUsername = newUsername.trim();
-      setUsername(trimmedUsername);
-      
-      // Create session for manual username entry
-      const sessionKey = `room_${roomId}_session`;
-      const expiry = Date.now() + (2 * 60 * 60 * 1000); // 2 hours
-      const sessionData = {
-        username: trimmedUsername,
-        isAdmin: false, // Will be updated if user is first to join
-        role: 'participant',
-        joinedAt: new Date().toISOString(),
-        expiry
-      };
-      
-      localStorage.setItem(sessionKey, JSON.stringify(sessionData));
-      setSessionExpiry(expiry);
+      // Only commit the username here; the join effect performs the actual
+      // join and writes the session on success — writing the session first
+      // made the effect skip the join, leaving the user unregistered
+      setUsername(newUsername.trim());
     }
   };
 
@@ -644,14 +650,14 @@ export function SupabaseChatInterface({ roomId, roomPassword, userData, onLeave,
           <div className="space-y-4">
             <Input
               placeholder="Enter your username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleUsernameSubmit(username)}
+              value={usernameInput}
+              onChange={(e) => setUsernameInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleUsernameSubmit(usernameInput)}
               className="bg-background/50"
             />
-            <Button 
-              onClick={() => handleUsernameSubmit(username)}
-              disabled={!username.trim() || isJoining}
+            <Button
+              onClick={() => handleUsernameSubmit(usernameInput)}
+              disabled={!usernameInput.trim() || isJoining}
               className="w-full"
             >
               {isJoining ? 'Joining...' : 'Join Room'}
