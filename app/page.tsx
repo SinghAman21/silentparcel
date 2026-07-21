@@ -119,6 +119,12 @@ export default function Home() {
 				}
 			);
 		});
+
+		return () => {
+			// Kill triggers/timeline so client-side nav doesn't leak them against stale DOM
+			ScrollTrigger.getAll().forEach((trigger) => trigger.kill());
+			tl.kill();
+		};
 	}, []);
 
 	return (
@@ -867,7 +873,7 @@ export default function Home() {
 										Start sharing securely
 									</Button>
 								</Link>
-								<Link href="/about" className="max-[476px]:hidden">
+								<Link href="/security" className="max-[476px]:hidden">
 									<Button className="px-12 py-4 bg-muted hover:bg-muted/80 text-foreground rounded-lg font-medium border border-border transition-all duration-200">
 										Learn about our security
 										<ArrowRight className="ml-2 h-4 w-4" />
