@@ -85,31 +85,37 @@ export class RateLimiter {
   async isAllowed(req: NextRequest): Promise<{ allowed: boolean; resetTime?: number; remaining?: number }> {
     const ip = getClientIP(req);
     const key = `${this.keyPrefix}:${ip}`;
-    
+
+    // A non-positive window means no limiting (e.g. room creation)
+    if (this.windowMs <= 0) {
+      return { allowed: true, remaining: this.maxRequests };
+    }
+
     // Try Redis first, fallback to in-memory
     if (redis) {
       try {
-        const current = await redis.get(key);
-        const requestCount = current ? parseInt(current) : 0;
-        const remaining = Math.max(0, this.maxRequests - requestCount);
-        
-        if (requestCount >= this.maxRequests) {
-          const ttl = await redis.ttl(key);
+        // Atomic increment; plain GET+SET both raced under load and
+        // wiped the TTL, leaving IPs rate-limited forever
+        const newCount = await redis.incr(key);
+        if (newCount === 1) {
+          await redis.pexpire(key, this.windowMs);
+        } else {
+          const ttl = await redis.pttl(key);
+          if (ttl < 0) {
+            // Key somehow lost its TTL — restore it so the window expires
+            await redis.pexpire(key, this.windowMs);
+          }
+        }
+
+        if (newCount > this.maxRequests) {
+          const ttl = await redis.pttl(key);
           return {
             allowed: false,
-            resetTime: Date.now() + (ttl * 1000),
+            resetTime: Date.now() + Math.max(ttl, 0),
             remaining: 0
           };
         }
-        
-        // Increment counter
-        const newCount = requestCount + 1;
-        if (newCount === 1) {
-          await redis.setex(key, Math.floor(this.windowMs / 1000), newCount.toString());
-        } else {
-          await redis.set(key, newCount.toString());
-        }
-        
+
         return { allowed: true, remaining: this.maxRequests - newCount };
       } catch (error) {
         console.error('Redis rate limiter error, falling back to in-memory:', error);
