@@ -148,7 +148,9 @@ async function handleChunkUpload(request: NextRequest) {
   const chunkIndex = parseInt(formData.get('chunkIndex') as string);
   const chunk = formData.get('chunk') as File;
 
-  if (!uploadId || !fileName || chunkIndex === undefined || !chunk) {
+  // parseInt never yields undefined — NaN would sail past every later
+  // guard and permanently wedge the upload with a phantom chunk
+  if (!uploadId || !fileName || !Number.isInteger(chunkIndex) || chunkIndex < 0 || !chunk) {
     return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
   }
 
@@ -397,7 +399,9 @@ async function handleCompleteUpload(request: NextRequest) {
 
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || request.nextUrl.origin;
     const downloadUrl = `${baseUrl}/files/${downloadToken}`;
-    const editUrl = `${baseUrl}/files/manage/${editToken}`;
+    // The manage page resolves its [id] param as the download token; the
+    // edit token is entered separately as authentication
+    const editUrl = `${baseUrl}/files/manage/${downloadToken}`;
 
     return NextResponse.json({
       success: true,
@@ -459,20 +463,43 @@ async function handleUploadStatus(request: NextRequest) {
 async function handleSSEStatus(uploadId: string) {
   const encoder = new TextEncoder();
   
+  let interval: ReturnType<typeof setInterval> | null = null;
+  let closed = false;
+
   const stream = new ReadableStream({
     start(controller) {
+      const stop = () => {
+        closed = true;
+        if (interval) {
+          clearInterval(interval);
+          interval = null;
+        }
+        try {
+          controller.close();
+        } catch {
+          // already closed
+        }
+      };
+
       const sendEvent = (data: any) => {
+        if (closed) return;
         const message = `data: ${JSON.stringify(data)}\n\n`;
-        controller.enqueue(encoder.encode(message));
+        try {
+          controller.enqueue(encoder.encode(message));
+        } catch {
+          // Client disconnected; stop polling
+          stop();
+        }
       };
 
       const checkProgress = async () => {
+        if (closed) return;
         try {
           if (redis) {
             const sessionData = await redis.get(REDIS_KEYS.FILE_UPLOAD(uploadId));
             if (!sessionData) {
               sendEvent({ error: 'Upload session not found' });
-              controller.close();
+              stop();
               return;
             }
 
@@ -492,28 +519,28 @@ async function handleSSEStatus(uploadId: string) {
             });
 
             if (session.completed) {
-              controller.close();
+              stop();
             }
           }
         } catch (error) {
           sendEvent({ error: 'Failed to check progress' });
-          controller.close();
+          stop();
         }
       };
 
       // Check progress every 2 seconds
-      const interval = setInterval(checkProgress, 2000);
-      
+      interval = setInterval(checkProgress, 2000);
+
       // Initial check
       checkProgress();
-
-      // Cleanup on close
-      const cleanup = () => {
+    },
+    cancel() {
+      // Client disconnected — stop the Redis polling loop
+      closed = true;
+      if (interval) {
         clearInterval(interval);
-      };
-      
-      // No signal property on ReadableStreamDefaultController
-      // controller.signal?.addEventListener('abort', cleanup);
+        interval = null;
+      }
     },
   });
 
