@@ -1,4 +1,6 @@
 // Simple verification script for environment setup
+require('dotenv').config({ path: '.env.local' });
+require('dotenv').config();
 console.log('🔍 Verifying environment setup...\n');
 
 // Check required environment variables
