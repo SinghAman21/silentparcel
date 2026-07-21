@@ -55,6 +55,7 @@ export class ChunkedUploader {
   private abortController: AbortController | null = null;
   private eventSource: EventSource | null = null;
   private isUploading = false;
+  private isPolling = false;
   private startTime: number = 0;
   private uploadedBytes = 0;
   private totalBytes = 0;
@@ -101,6 +102,7 @@ export class ChunkedUploader {
 
   // Fallback to traditional upload for small files
   private async fallbackUpload(): Promise<UploadResult> {
+    this.startTime = Date.now();
     const formData = new FormData();
     
     this.options.files.forEach((file, index) => {
@@ -147,18 +149,28 @@ export class ChunkedUploader {
       });
 
       xhr.addEventListener('load', async () => {
+        // Guard JSON.parse: a proxy/server error page is not JSON and an
+        // uncaught throw here would leave this promise pending forever
         if (xhr.status === 200) {
-          const result = JSON.parse(xhr.responseText);
-          resolve({
-            success: true,
-            downloadUrl: result.downloadUrl,
-            editUrl: result.editUrl,
-            zipId: result.zipId,
-            subfiles: result.subfiles
-          });
+          try {
+            const result = JSON.parse(xhr.responseText);
+            resolve({
+              success: true,
+              downloadUrl: result.downloadUrl,
+              editUrl: result.editUrl,
+              zipId: result.zipId,
+              subfiles: result.subfiles
+            });
+          } catch {
+            reject(new Error('Upload succeeded but response could not be parsed'));
+          }
         } else {
-          const error = JSON.parse(xhr.responseText);
-          reject(new Error(error.error || 'Upload failed'));
+          try {
+            const error = JSON.parse(xhr.responseText);
+            reject(new Error(error.error || 'Upload failed'));
+          } catch {
+            reject(new Error(`Upload failed with status ${xhr.status}`));
+          }
         }
       });
 
@@ -295,8 +307,12 @@ export class ChunkedUploader {
         return; // Success
         
       } catch (error: any) {
+        // Don't retry a user-cancelled upload
+        if (error.name === 'AbortError') {
+          throw error;
+        }
         attempt++;
-        
+
         if (attempt >= maxRetries) {
           throw new Error(`Failed to upload chunk ${chunkIndex} for ${file.name} after ${maxRetries} attempts: ${error.message}`);
         }
@@ -317,11 +333,14 @@ export class ChunkedUploader {
     const executing: Promise<void>[] = [];
     
     for (const task of tasks) {
-      const promise = task().then(result => {
-        results.push(result);
-        executing.splice(executing.indexOf(promise), 1);
-      });
-      
+      const promise = task()
+        .then(result => {
+          results.push(result);
+        })
+        .finally(() => {
+          executing.splice(executing.indexOf(promise), 1);
+        });
+
       executing.push(promise);
       
       if (executing.length >= maxConcurrency) {
@@ -347,25 +366,9 @@ export class ChunkedUploader {
           this.options.onError?.(new Error(data.error));
           return;
         }
-        
-        const progress: UploadProgress = {
-          overallProgress: this.calculateOverallProgress(data.progress),
-          files: data.progress.map((fp: any) => ({
-            fileName: fp.fileName,
-            fileSize: this.options.files.find(f => f.name === fp.fileName)?.size || 0,
-            uploadedChunks: fp.uploadedChunks,
-            totalChunks: fp.totalChunks,
-            progress: fp.progress,
-            status: fp.progress === 100 ? 'completed' : 'uploading'
-          })),
-          uploadedBytes: this.uploadedBytes,
-          totalBytes: this.totalBytes,
-          uploadSpeed: this.calculateUploadSpeed(this.uploadedBytes),
-          estimatedTimeRemaining: this.calculateETA(this.uploadedBytes, this.totalBytes)
-        };
-        
-        this.options.onProgress?.(progress);
-        
+
+        this.handleProgressUpdate(data.progress);
+
       } catch (error) {
         console.error('Progress monitoring error:', error);
       }
@@ -373,33 +376,61 @@ export class ChunkedUploader {
     
     this.eventSource.onerror = (error) => {
       console.warn('SSE connection error:', error);
-      // Fallback to polling if SSE fails
+      // Fallback to polling if SSE fails; close the source so onerror
+      // doesn't keep firing on reconnect attempts and stack pollers
+      this.eventSource?.close();
+      this.eventSource = null;
       this.startPollingProgress();
     };
   }
 
   // Fallback progress monitoring with polling
   private startPollingProgress(): void {
-    if (!this.uploadId || !this.isUploading) return;
-    
+    if (!this.uploadId || !this.isUploading || this.isPolling) return;
+    this.isPolling = true;
+
     const poll = async () => {
       try {
         const response = await fetch(`/api/files/upload/chunked?action=status&uploadId=${this.uploadId}`);
         if (response.ok) {
           const data = await response.json();
-          // Process progress data similar to SSE handler
-          // ... (same logic as SSE onmessage)
+          if (data.progress) {
+            this.handleProgressUpdate(data.progress);
+          }
         }
       } catch (error) {
         console.warn('Polling progress error:', error);
       }
-      
+
       if (this.isUploading) {
         setTimeout(poll, 2000); // Poll every 2 seconds
+      } else {
+        this.isPolling = false;
       }
     };
-    
+
     poll();
+  }
+
+  // Build and emit an UploadProgress from server-reported per-file progress
+  private handleProgressUpdate(fileProgress: any[]): void {
+    const progress: UploadProgress = {
+      overallProgress: this.calculateOverallProgress(fileProgress),
+      files: fileProgress.map((fp: any) => ({
+        fileName: fp.fileName,
+        fileSize: this.options.files.find(f => f.name === fp.fileName)?.size || 0,
+        uploadedChunks: fp.uploadedChunks,
+        totalChunks: fp.totalChunks,
+        progress: fp.progress,
+        status: fp.progress === 100 ? 'completed' : 'uploading'
+      })),
+      uploadedBytes: this.uploadedBytes,
+      totalBytes: this.totalBytes,
+      uploadSpeed: this.calculateUploadSpeed(this.uploadedBytes),
+      estimatedTimeRemaining: this.calculateETA(this.uploadedBytes, this.totalBytes)
+    };
+
+    this.options.onProgress?.(progress);
   }
 
   // Complete upload and get final result
