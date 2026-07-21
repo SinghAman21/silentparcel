@@ -426,7 +426,18 @@ export default function CreateRoomPage() {
               <Button 
                 variant="outline" 
                 className="flex-1 hover:scale-105 transition-transform"
-                onClick={() => router.push('/rooms/create')}
+                onClick={() => {
+                  // Already on /rooms/create — router.push is a no-op; reset state instead
+                  setStage('setup');
+                  setRoomName('');
+                  setActualRoomName('');
+                  setGeneratedPassword('');
+                  setRoomLink('');
+                  setRoomId('');
+                  setCopiedPassword(false);
+                  setCopiedLink(false);
+                  setCopiedRoomId(false);
+                }}
               >
                 Create Another Room
               </Button>
