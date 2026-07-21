@@ -161,6 +161,9 @@ export function CollaborativeCodeInterface({
   // UI + editor state
   const [message, setMessage] = useState("");
   const [username, setUsername] = useState("");
+  // Dialog draft — committed to `username` only on submit, otherwise the
+  // join effect fires on the first keystroke and registers a partial name
+  const [usernameInput, setUsernameInput] = useState("");
   const [showUsernameDialog, setShowUsernameDialog] = useState(true);
   const [timeLeft, setTimeLeft] = useState(3600); // Will be updated with actual room expiry
   const [roomExpiresAt, setRoomExpiresAt] = useState<string | null>(null);
@@ -207,6 +210,18 @@ export function CollaborativeCodeInterface({
   const lastLocalContentRef = useRef<string>("");
   const lastCursorSentRef = useRef<number>(0);
 
+  // Monaco's onDidChangeModelContent handler registers once at mount, so it
+  // must read live values through refs — closing over state directly meant
+  // currentDocumentId stayed null and every save created a new document
+  const currentDocumentIdRef = useRef<string | null>(null);
+  const selectedLanguageRef = useRef(selectedLanguage);
+  const userIdRef = useRef<string | null>(null);
+  const usernameRef = useRef("");
+  useEffect(() => { currentDocumentIdRef.current = currentDocumentId; }, [currentDocumentId]);
+  useEffect(() => { selectedLanguageRef.current = selectedLanguage; }, [selectedLanguage]);
+  useEffect(() => { userIdRef.current = userId; }, [userId]);
+  useEffect(() => { usernameRef.current = username; }, [username]);
+
   // Decorations for remote cursors
   const remoteCursorDecorationsRef = useRef<Map<string, string[]>>(new Map());
 
@@ -234,9 +249,13 @@ export function CollaborativeCodeInterface({
 
   // Decrypt messages when they arrive or room password changes
   useEffect(() => {
+    // Guard against an older (slow) decryption run resolving after a newer
+    // one and clobbering it with a map missing the latest messages
+    let cancelled = false;
+
     const decryptAllMessages = async () => {
       if (!roomPassword) return;
-      
+
       const newDecryptedMap = new Map<string, string>();
       
       for (const msg of messages) {
@@ -264,10 +283,16 @@ export function CollaborativeCodeInterface({
         }
       }
       
-      setDecryptedMessages(newDecryptedMap);
+      if (!cancelled) {
+        setDecryptedMessages(newDecryptedMap);
+      }
     };
 
     decryptAllMessages();
+
+    return () => {
+      cancelled = true;
+    };
   }, [messages, roomPassword]);
 
   // Auto scroll to bottom
@@ -440,14 +465,15 @@ export function CollaborativeCodeInterface({
   // FIXED: Timer countdown with actual room expiry time
   useEffect(() => {
     if (!roomExpiresAt) return;
-    
+
+    let redirectTimer: ReturnType<typeof setTimeout> | null = null;
     const timer = setInterval(() => {
       const expiryTime = new Date(roomExpiresAt).getTime();
       const now = Date.now();
       const secondsLeft = Math.max(0, Math.floor((expiryTime - now) / 1000));
-      
+
       setTimeLeft(secondsLeft);
-      
+
       // If time is up, show expiry message and redirect
       if (secondsLeft === 0) {
         toast({
@@ -455,17 +481,21 @@ export function CollaborativeCodeInterface({
           description: "This room has expired and will be cleaned up.",
           variant: "destructive"
         });
-        
+
         // Redirect after a short delay
-        setTimeout(() => {
+        redirectTimer = setTimeout(() => {
           onLeave();
         }, 3000);
-        
+
         clearInterval(timer);
       }
     }, 1000);
-    
-    return () => clearInterval(timer);
+
+    return () => {
+      clearInterval(timer);
+      // Don't navigate the user after they've already left/unmounted
+      if (redirectTimer) clearTimeout(redirectTimer);
+    };
   }, [roomExpiresAt, toast, onLeave]);
 
   // Ensure a document row exists, and load it
@@ -588,6 +618,8 @@ export function CollaborativeCodeInterface({
 
     (async () => {
       await ensureAndLoadDocument();
+      // Cleanup may have run while we awaited — don't create a channel it can never remove
+      if (!mounted) return;
 
       const channel = supabase.channel(`code-room-${roomId}`);
       channelRef.current = channel;
@@ -679,7 +711,12 @@ export function CollaborativeCodeInterface({
       });
 
       await channel.subscribe();
-      if (!mounted) return;
+      if (!mounted) {
+        // Unmounted mid-subscribe — tear the channel down instead of leaking it
+        supabase.removeChannel(channel);
+        if (channelRef.current === channel) channelRef.current = null;
+        return;
+      }
       setIsConnected(true);
     })();
 
@@ -707,6 +744,17 @@ export function CollaborativeCodeInterface({
       setCursorPositions((prev) => prev.filter((c) => (c.lastSeen ?? 0) > Date.now() - CURSOR_STALE_MS));
     }, 5000);
     return () => clearInterval(id);
+  }, []);
+
+  // Drop any pending debounced save on unmount — it would otherwise fire
+  // after leaving, broadcasting on a removed channel and setting state
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        window.clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+    };
   }, []);
 
   // Editor mount + handlers
@@ -745,7 +793,7 @@ export function CollaborativeCodeInterface({
                 event: "code-update",
                 payload: {
                   content,
-                  username, // for UI hints on listeners
+                  username: usernameRef.current, // for UI hints on listeners
                   updatedAt
                 }
               });
@@ -756,18 +804,18 @@ export function CollaborativeCodeInterface({
 
           // Persist to DB via API
           try {
-            if (currentDocumentId) {
+            if (currentDocumentIdRef.current) {
               // Update existing document
-              const response = await fetch(`/api/chat/rooms/${roomId}/documents/${currentDocumentId}`, {
+              const response = await fetch(`/api/chat/rooms/${roomId}/documents/${currentDocumentIdRef.current}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   content,
-                  language: selectedLanguage,
-                  userId: userId
+                  language: selectedLanguageRef.current,
+                  userId: userIdRef.current
                 })
               });
-              
+
               if (!response.ok) {
                 console.error('Failed to update document via API');
               }
@@ -778,12 +826,12 @@ export function CollaborativeCodeInterface({
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   documentName: DOCUMENT_NAME,
-                  language: selectedLanguage,
+                  language: selectedLanguageRef.current,
                   content,
-                  userId: userId
+                  userId: userIdRef.current
                 })
               });
-              
+
               if (response.ok) {
                 const data = await response.json();
                 if (data.success && data.document) {
@@ -795,7 +843,7 @@ export function CollaborativeCodeInterface({
             }
 
             // Update UI hints immediately
-            setLastEditorName(username || "-");
+            setLastEditorName(usernameRef.current || "-");
             setLastEditedAt(new Date().toLocaleString());
           } catch (err) {
             console.error("Persist doc exception:", err);
@@ -815,8 +863,8 @@ export function CollaborativeCodeInterface({
             type: "broadcast",
             event: "cursor-update",
             payload: {
-              username,
-              color: getCursorColor(username),
+              username: usernameRef.current,
+              color: getCursorColor(usernameRef.current),
               lineNumber: e.position.lineNumber,
               column: e.position.column
             }
@@ -826,7 +874,8 @@ export function CollaborativeCodeInterface({
         }
       });
     },
-    [initialCode, roomId, selectedLanguage, userId, username, currentDocumentId]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [initialCode, roomId]
   );
 
   // Change language: update Monaco + persist language column
@@ -1174,12 +1223,12 @@ export function CollaborativeCodeInterface({
           <div className="space-y-4">
             <Input
               placeholder="Enter your username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleUsernameSubmit(username)}
+              value={usernameInput}
+              onChange={(e) => setUsernameInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleUsernameSubmit(usernameInput)}
               className="bg-background/50"
             />
-            <Button onClick={() => handleUsernameSubmit(username)} disabled={!username.trim() || isJoining} className="w-full">
+            <Button onClick={() => handleUsernameSubmit(usernameInput)} disabled={!usernameInput.trim() || isJoining} className="w-full">
               {isJoining ? "Joining..." : "Join Room"}
             </Button>
           </div>
