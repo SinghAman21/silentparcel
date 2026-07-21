@@ -6,6 +6,11 @@ client
   .setEndpoint(process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT || 'https://placeholder.appwrite.io/v1')
   .setProject(process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID || 'placeholder-project-id');
 
+// Server-side operations need the API key; without it the SDK runs with guest scope
+if (process.env.APPWRITE_API_KEY) {
+  client.setKey(process.env.APPWRITE_API_KEY);
+}
+
 // For server-side operations
 
 export const account = new Account(client);
