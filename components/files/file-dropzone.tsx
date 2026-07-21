@@ -28,16 +28,27 @@ export function FileDropzone({ onFileSelect }: FileDropzoneProps) {
       });
     } else if (item.isDirectory) {
       const dirReader = item.createReader();
-      dirReader.readEntries((entries: any[]) => {
-        let remaining = entries.length;
-        if (!remaining) done();
-        for (const entry of entries) {
-          traverseFileTree(entry, path + item.name + '/', collected, () => {
-            remaining--;
-            if (remaining === 0) done();
-          });
-        }
-      });
+      // readEntries returns at most ~100 entries per call; keep calling
+      // until it returns an empty batch or large folders get silently truncated
+      const allEntries: any[] = [];
+      const readBatch = () => {
+        dirReader.readEntries((entries: any[]) => {
+          if (entries.length > 0) {
+            allEntries.push(...entries);
+            readBatch();
+            return;
+          }
+          let remaining = allEntries.length;
+          if (!remaining) done();
+          for (const entry of allEntries) {
+            traverseFileTree(entry, path + item.name + '/', collected, () => {
+              remaining--;
+              if (remaining === 0) done();
+            });
+          }
+        });
+      };
+      readBatch();
     } else {
       done();
     }
