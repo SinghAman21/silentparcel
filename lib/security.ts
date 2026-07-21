@@ -51,7 +51,7 @@ export const generateRoomPassword = (): string => {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let result = '';
   for (let i = 0; i < 8; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
+    result += chars.charAt(crypto.randomInt(chars.length));
   }
   return result;
 };
@@ -108,11 +108,16 @@ export const validateZipSize = (zipSize: number): { isValid: boolean; message?: 
 export const getClientIP = (req: any): string => {
   // Next.js API routes: req.headers.get for edge, req.headers for node
   if (typeof req.headers?.get === 'function') {
-    // Edge API route (NextRequest)
-    return req.headers.get('x-forwarded-for') || '127.0.0.1';
+    // Edge API route (NextRequest); x-forwarded-for is "client, proxy1, ..." — take the client hop
+    const forwarded = req.headers.get('x-forwarded-for');
+    if (forwarded) return forwarded.split(',')[0].trim();
+    return '127.0.0.1';
   }
   if (req.headers && typeof req.headers === 'object') {
-    return req.headers['x-forwarded-for'] || '127.0.0.1';
+    const forwarded = req.headers['x-forwarded-for'];
+    const value = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+    if (value) return value.split(',')[0].trim();
+    return '127.0.0.1';
   }
   return '127.0.0.1';
 };
@@ -173,10 +178,10 @@ export const calculateZipSize = async (files: File[]): Promise<number> => {
 
 // Format file size for display
 export const formatFileSize = (bytes: number): string => {
-  if (bytes === 0) return '0 Bytes';
+  if (bytes <= 0) return '0 Bytes';
   const k = 1024;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
@@ -195,7 +200,10 @@ export const encrypt = (text: string): string => {
 export const decrypt = (encryptedText: string): string => {
   const key = crypto.scryptSync(process.env.ENCRYPTION_KEY!, 'salt', 32);
   const [ivHex, encrypted] = encryptedText.split(':');
-  
+  if (!ivHex || !encrypted) {
+    throw new Error('Invalid encrypted payload format');
+  }
+
   const iv = Buffer.from(ivHex, 'hex');
   const decipher = crypto.createDecipheriv('aes-256-cbc', key as unknown as Uint8Array, iv as unknown as Uint8Array);
   
