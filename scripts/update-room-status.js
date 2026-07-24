@@ -35,18 +35,16 @@ async function deactivateExpiredRooms() {
       return;
     }
 
-    // Filter rooms that are expired after converting expires_at to GMT (+5:30)
-    const currentGMT = new Date();
+    // expires_at is a timestamptz stored in UTC; compare directly —
+    // adding a manual IST offset delayed every deactivation by 5.5h
+    const now = new Date();
     const expiredRooms = allRooms.filter(room => {
       if (!room.expires_at) return false;
-      
-      // Convert expires_at to GMT by adding 5:30 hours (IST offset)
+
       const expiryTime = new Date(room.expires_at);
-      const gmtExpiryTime = new Date(expiryTime.getTime() + (5.5 * 60 * 60 * 1000)); // Add 5:30 hours
-      
-      console.log(`Room ${room.room_id}: Original expiry: ${expiryTime.toISOString()}, GMT adjusted: ${gmtExpiryTime.toISOString()}, Current GMT: ${currentGMT.toISOString()}`);
-      
-      return gmtExpiryTime <= currentGMT;
+      console.log(`Room ${room.room_id}: expiry: ${expiryTime.toISOString()}, now: ${now.toISOString()}`);
+
+      return expiryTime <= now;
     });
 
     if (!expiredRooms || expiredRooms.length === 0) {

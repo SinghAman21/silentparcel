@@ -35,6 +35,7 @@ export async function POST(request: NextRequest) {
     const roomId = generateId().substring(0, 8); // Ensure 8 characters
     const roomPassword = generateRoomPassword();
     const creatorId = generateId();
+    const expiresAt = new Date(Date.now() + parseExpiryMs(expiryTime || '1h'));
     // FIXED: Don't create phantom users - room creation shouldn't auto-add participants
 
     // Create room using Prisma transaction
@@ -46,6 +47,7 @@ export async function POST(request: NextRequest) {
           name: roomName || getDefaultRoomName(roomType),
           password: roomPassword,
           expiry_time: expiryTime || '1h',
+          expires_at: expiresAt,
           created_by: creatorId,
           is_active: true,
           room_type: roomType
@@ -146,6 +148,14 @@ export async function POST(request: NextRequest) {
 }
 
 // Helper functions
+function parseExpiryMs(expiryTime: string): number {
+  const match = /^(\d+)([mhd])$/.exec(expiryTime.trim());
+  if (!match) return 60 * 60 * 1000; // default 1h
+  const value = parseInt(match[1], 10);
+  const unitMs = { m: 60 * 1000, h: 60 * 60 * 1000, d: 24 * 60 * 60 * 1000 }[match[2] as 'm' | 'h' | 'd'];
+  return value * unitMs;
+}
+
 function getRandomColor(): string {
   const colors = ['#e57373', '#64b5f6', '#81c784', '#ffd54f', '#ba68c8', '#4db6ac', '#ff8a65', '#7986cb'];
   return colors[Math.floor(Math.random() * colors.length)];

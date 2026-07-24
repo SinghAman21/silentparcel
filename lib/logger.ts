@@ -19,7 +19,7 @@ class Logger {
 
   constructor() {
     const level = process.env.LOG_LEVEL?.toUpperCase() || 'INFO';
-    this.logLevel = LogLevel[level as keyof typeof LogLevel] || LogLevel.INFO;
+    this.logLevel = LogLevel[level as keyof typeof LogLevel] ?? LogLevel.INFO;
   }
 
   private shouldLog(level: LogLevel): boolean {

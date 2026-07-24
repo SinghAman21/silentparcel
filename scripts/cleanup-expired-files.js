@@ -66,7 +66,9 @@ async function cleanup() {
         }
       );
 
-      if (!appwriteResponse.ok) {
+      if (!appwriteResponse.ok && appwriteResponse.status !== 404) {
+        // 404 means the storage object is already gone — still clean up the
+        // metadata, otherwise the row is retried and skipped forever
         const errorText = await appwriteResponse.text();
         console.error(`Failed to delete file ${file.id} from Appwrite. Status: ${appwriteResponse.status}, Error: ${errorText}`);
         continue; // Skip to next file, don't delete from Supabase
@@ -111,4 +113,7 @@ async function cleanup() {
   console.log('Cleanup script finished.');
 }
 
-cleanup();
+cleanup().catch(err => {
+  console.error('Cleanup script failed:', err);
+  process.exitCode = 1;
+});

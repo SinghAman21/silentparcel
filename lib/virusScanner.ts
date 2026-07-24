@@ -59,21 +59,28 @@ export class VirusScanner {
         socket.write(endBuffer as unknown as Uint8Array);
       });
 
+      // Accumulate chunks — the ClamAV reply can arrive split across TCP packets
+      let responseData = '';
       socket.on('data', (data) => {
-        const response = data.toString().trim();
+        responseData += data.toString();
+        if (!responseData.includes('\n') && !responseData.includes('\0')) {
+          return; // reply not complete yet
+        }
+        const response = responseData.trim();
         socket.end();
 
-        if (response.includes('OK')) {
-          resolve({
-            isClean: true,
-            message: 'File is clean'
-          });
-        } else if (response.includes('FOUND')) {
+        // Check FOUND before OK: a signature name could itself contain "OK"
+        if (response.includes('FOUND')) {
           const signature = response.split(' ')[1];
           resolve({
             isClean: false,
             message: 'Virus detected',
             signature
+          });
+        } else if (response.includes('OK')) {
+          resolve({
+            isClean: true,
+            message: 'File is clean'
           });
         } else {
           reject(new Error(`Unknown ClamAV response: ${response}`));

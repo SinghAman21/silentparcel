@@ -591,7 +591,6 @@ export default function FilesPage() {
 														disabled={selectedFiles.some(
 															(file) => file.size > 50 * 1024 * 1024
 														) || zipSize > 50 * 1024 * 1024}
-														asChild
 													>
 														<span className="flex items-center justify-center gap-2">
 															<Upload className="h-5 w-5" />

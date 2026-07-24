@@ -96,10 +96,13 @@ export default function ChatRoomPage({ searchParams }: { searchParams: Promise<{
 				}),
 			});
 
-			// Handle username conflict
+			// Handle username conflict; keep the parsed body around — the
+			// response body can only be consumed once
+			let responseData: any = null;
 			if (registerResponse.status === 409) {
 				const conflictData = await registerResponse.json();
-				
+				responseData = conflictData;
+
 				if (conflictData.code === 'USERNAME_EXISTS') {
 					// Generate a random username to resolve conflict
 					finalUsername = `user_${Math.random().toString(36).substr(2, 6)}`;
@@ -117,15 +120,16 @@ export default function ChatRoomPage({ searchParams }: { searchParams: Promise<{
 							userId: self.crypto.randomUUID()
 						}),
 					});
+					responseData = null; // fresh response, body not yet read
 				}
 			}
 
 			if (!registerResponse.ok) {
-				const errorData = await registerResponse.json();
+				const errorData = responseData ?? (await registerResponse.json().catch(() => ({})));
 				throw new Error(errorData.error || 'Failed to join room');
 			}
 
-			const registrationData = await registerResponse.json();
+			const registrationData = responseData ?? (await registerResponse.json());
 			console.log('User registered in chat_participants:', registrationData);
 			
 			// Create user data with admin status if first user

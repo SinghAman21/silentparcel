@@ -7,15 +7,20 @@ let redis: Redis | null = null;
 
 if (isRedisAvailable) {
   try {
-    redis = new Redis({
-      host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT || '6379'),
-      password: process.env.REDIS_PASSWORD,
+    const redisOptions = {
       enableReadyCheck: false,
       maxRetriesPerRequest: 3,
       lazyConnect: true,
       connectTimeout: 60000,
-    });
+    };
+    redis = process.env.REDIS_URL
+      ? new Redis(process.env.REDIS_URL, redisOptions)
+      : new Redis({
+          host: process.env.REDIS_HOST || 'localhost',
+          port: parseInt(process.env.REDIS_PORT || '6379'),
+          password: process.env.REDIS_PASSWORD,
+          ...redisOptions,
+        });
 
     // Handle Redis connection errors gracefully
     redis.on('error', (error) => {
@@ -61,10 +66,12 @@ export const setWithExpiry = async (key: string, value: string, ttl: number) => 
 export const getAndDelete = async (key: string) => {
   if (redis) {
     try {
-      const value = await redis.get(key);
-      if (value) {
-        await redis.del(key);
-      }
+      // Atomic get+delete so a one-time token can't be redeemed twice concurrently
+      const value = (await redis.eval(
+        "local v = redis.call('GET', KEYS[1]) if v then redis.call('DEL', KEYS[1]) end return v",
+        1,
+        key
+      )) as string | null;
       console.log('redis - getAndDelete complete');
       return value;
     } catch (error) {

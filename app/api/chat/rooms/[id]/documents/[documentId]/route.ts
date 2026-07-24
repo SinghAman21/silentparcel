@@ -135,7 +135,10 @@ export async function DELETE(
 
     // Soft delete document
     try {
-      await prisma.collaborative_code_documents.updateMany({ where: { id: documentId, room_id: roomId }, data: { is_active: false } });
+      const result = await prisma.collaborative_code_documents.updateMany({ where: { id: documentId, room_id: roomId }, data: { is_active: false } });
+      if (result.count === 0) {
+        return NextResponse.json({ error: 'Document not found' }, { status: 404 });
+      }
       console.log('chat - delete document complete');
       return NextResponse.json({ success: true, message: 'Document deleted successfully' });
     } catch (err) {

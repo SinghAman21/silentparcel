@@ -14,7 +14,12 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const { id } = await context.params;
 
   if (request.headers.get('content-type')?.includes('application/json')) {
-    const { editToken } = await request.json();
+    let editToken: string | undefined;
+    try {
+      ({ editToken } = await request.json());
+    } catch {
+      return NextResponse.json({ valid: false, error: 'Invalid JSON body' }, { status: 400 });
+    }
     if (!editToken) {
       return NextResponse.json({ valid: false, error: 'Missing edit token' }, { status: 400 });
     }
@@ -42,9 +47,15 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const relPaths = formData.getAll('relativePaths') as string[];
     const editToken = formData.get('editToken') as string;
     const filesToDeleteRaw = formData.get('filesToDelete') as string;
-    const filesToDelete = filesToDeleteRaw ? JSON.parse(filesToDeleteRaw) : [];
     const pathsToAddRaw = formData.get('pathsToAdd') as string;
-    const pathsToAdd = pathsToAddRaw ? JSON.parse(pathsToAddRaw) : [];
+    let filesToDelete: string[] = [];
+    let pathsToAdd: string[] = [];
+    try {
+      filesToDelete = filesToDeleteRaw ? JSON.parse(filesToDeleteRaw) : [];
+      pathsToAdd = pathsToAddRaw ? JSON.parse(pathsToAddRaw) : [];
+    } catch {
+      return NextResponse.json({ error: 'Malformed filesToDelete or pathsToAdd' }, { status: 400 });
+    }
     
     console.log('=== FILE UPDATE WORKFLOW START ===');
     console.log('Received update request:', {

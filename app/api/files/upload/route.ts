@@ -193,8 +193,10 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData();
     // Debug: log all formData keys and values
-    const debugEntries = Array.from(formData.entries());
-    console.log('FormData entries:', debugEntries.map(([k, v]) => [k, v instanceof File ? v.name : v]));
+    const debugEntries = Array.from(formData.entries()).map(([k, v]) =>
+      [k, v instanceof File ? v.name : k === 'password' ? '[redacted]' : v] as [string, unknown]
+    );
+    console.log('FormData entries:', debugEntries);
     const files = formData.getAll('files') as File[];
     let relPaths = formData.getAll('relativePaths') as string[];
     console.log('Number of files received:', files.length);
@@ -220,7 +222,7 @@ export async function POST(request: NextRequest) {
       // Debug: log all formData entries if no files found
       console.error('No files provided. FormData entries:', debugEntries);
       return NextResponse.json(
-        { error: 'No files provided', debug: debugEntries },
+        { error: 'No files provided' },
         { status: 400 }
       );
     }
@@ -352,7 +354,9 @@ export async function POST(request: NextRequest) {
 
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || request.nextUrl.origin;
     const downloadUrl = `${baseUrl}/files/${fileRecord.download_token}`;
-    const editUrl = `${baseUrl}/files/manage/${fileRecord.edit_token}`;
+    // The manage page resolves its [id] param as the download token; the
+    // edit token is entered separately as authentication
+    const editUrl = `${baseUrl}/files/manage/${fileRecord.download_token}`;
 
     return NextResponse.json({
       success: true,
@@ -379,14 +383,14 @@ export async function POST(request: NextRequest) {
       statusCode = 503;
     }
     
-    // return NextResponse.json(
-    //   { 
-    //     error: errorMessage, 
-    //     details: err.message,
-    //     maxFileSize: process.env.MAX_FILE_SIZE || '52428800',
-    //     maxFileSizeMB: Math.round(parseInt(process.env.MAX_FILE_SIZE || '52428800') / 1024 / 1024)
-    //   },
-    //   { status: statusCode }
-    // );
+    return NextResponse.json(
+      {
+        error: errorMessage,
+        details: err.message,
+        maxFileSize: process.env.MAX_FILE_SIZE || '52428800',
+        maxFileSizeMB: Math.round(parseInt(process.env.MAX_FILE_SIZE || '52428800') / 1024 / 1024)
+      },
+      { status: statusCode }
+    );
   }
 }

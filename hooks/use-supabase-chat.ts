@@ -454,7 +454,12 @@ export const useSupabaseChat = (roomId: string): ChatState & ChatActions => {
           (payload: RealtimePostgresChangesPayload<any>) => {
             const newMessage = payload.new;
             if (newMessage && isMountedRef.current) {
-              setState(prev => ({
+              setState(prev => {
+                // The initial fetch and realtime INSERT race; skip duplicates
+                if (prev.messages.some(m => m.id === newMessage.id)) {
+                  return prev;
+                }
+                return {
                 ...prev,
                 messages: [...prev.messages, {
                   id: newMessage.id,
@@ -466,7 +471,8 @@ export const useSupabaseChat = (roomId: string): ChatState & ChatActions => {
                   userId: newMessage.user_id,
                 }],
                 lastMessageId: newMessage.id,
-              }));
+              };
+              });
             }
           }
         )
@@ -481,7 +487,11 @@ export const useSupabaseChat = (roomId: string): ChatState & ChatActions => {
           (payload: RealtimePostgresChangesPayload<any>) => {
             const newParticipant = payload.new;
             if (newParticipant && isMountedRef.current) {
-              setState(prev => ({
+              setState(prev => {
+                if (prev.participants.some(p => p.id === newParticipant.id)) {
+                  return prev;
+                }
+                return {
                 ...prev,
                 participants: [...prev.participants, {
                   id: newParticipant.id,
@@ -492,7 +502,8 @@ export const useSupabaseChat = (roomId: string): ChatState & ChatActions => {
                   isOnline: newParticipant.is_online,
                   userId: newParticipant.user_id,
                 }],
-              }));
+              };
+              });
             }
           }
         )
@@ -546,6 +557,10 @@ export const useSupabaseChat = (roomId: string): ChatState & ChatActions => {
 
           if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
             console.warn('Real-time connection error, scheduling reconnection...');
+            // Clear any armed timer first so repeated status errors don't stack reconnects
+            if (reconnectTimeoutRef.current) {
+              clearTimeout(reconnectTimeoutRef.current);
+            }
             reconnectTimeoutRef.current = setTimeout(reconnect, RECONNECT_DELAY);
           }
         });

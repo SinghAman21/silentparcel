@@ -75,7 +75,8 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const roomId = searchParams.get('roomId');
-    const limit = parseInt(searchParams.get('limit') || '50');
+    const parsedLimit = parseInt(searchParams.get('limit') || '50');
+    const limit = Number.isInteger(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), 500) : 50;
 
     if (!roomId) {
       return NextResponse.json(
