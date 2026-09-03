@@ -2,7 +2,7 @@ name: Cleanup Expired rooms
 
 on:
   schedule:
-    - cron: '0 * * * *' # every hour -- minute ,hour ,day of month,  month , day of week
+    - cron: '0 0 1,15 * *' # biweekly (1st and 15th of month) -- minute ,hour ,day of month,  month , day of week
   workflow_dispatch:
 
 jobs:

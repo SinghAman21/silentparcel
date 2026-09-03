@@ -2,7 +2,7 @@ name: Update is_active status
 
 on:
   schedule:
-    - cron: '*/5 * * * *' # every 5 minutes -- minute ,hour ,day of month,  month , day of week
+    - cron: '0 0 1,15 * *' # biweekly (1st and 15th of month) -- minute ,hour ,day of month,  month , day of week
   workflow_dispatch:
 
 jobs:
